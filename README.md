@@ -124,7 +124,10 @@ Repeat this after another project has reprogrammed the table.
    and the board's LCD shows two interlocked tori, a sphere weaving through
    them and five small bodies orbiting the whole: lit by three lights with
    highlights, ambient occlusion, fog and bloom by the NPU, rasterized by
-   the M55 with Helium.
+   the M55 with Helium. A line `SDS: no SDSIO-Server on the RTT channel,
+   not recording` is normal; with the SDS tools running it records the
+   frames as a video instead, see "Recording a video" in
+   [documentation/npu-render.md](documentation/npu-render.md#recording-a-video-of-the-target-with-sds).
 
 3. Set a breakpoint after `module.execute(MODEL_SHADE_METHOD, ...)` in
    `src/app_main.cpp` and inspect the G-buffer or the frame buffer, or ask

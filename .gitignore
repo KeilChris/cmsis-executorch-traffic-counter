@@ -84,3 +84,9 @@ fvp_stdout.log
 !.vscode/fvp.sh
 !.vscode/fvp.Dockerfile
 !.vscode/launch.json
+
+# SDS recordings of the rendered frames (documentation/npu-render.md); the
+# stream metadata *.sds.yml next to them is source.
+recordings/*.sds
+recordings/*.index.txt
+recordings/*.mp4

@@ -28,6 +28,9 @@
 
 #include "se_services_port.h"
 #include "board_display.h"
+#ifdef RTE_CMSIS_RTOS2
+#include "cmsis_os2.h"
+#endif
 
 /* VBAT power control bits for the MIPI TX DPHY and its PLL (pack layer main.c) */
 #define VBAT_PWR_CTRL_TX_DPHY_PWR_MASK        (1U <<  0) /* Mask off the power supply for MIPI TX DPHY */
@@ -48,6 +51,28 @@ static void dphy_power_init(void)
                         VBAT_PWR_CTRL_DPHY_PLL_PWR_MASK | VBAT_PWR_CTRL_DPHY_VPH_1P8_PWR_BYP_EN);
     VBAT->PWR_CTRL &= ~(VBAT_PWR_CTRL_TX_DPHY_ISO | VBAT_PWR_CTRL_RX_DPHY_ISO | VBAT_PWR_CTRL_DPHY_PLL_ISO);
 }
+
+#ifdef RTE_CMSIS_RTOS2
+#ifndef APP_THREAD_STACK_SIZE
+#define APP_THREAD_STACK_SIZE 0x8000
+#endif
+static uint64_t app_thread_stack[APP_THREAD_STACK_SIZE / 8] __attribute__((section(".bss.ai_pool")));
+static const osThreadAttr_t app_thread_attr = {
+    .name       = "app",
+    .stack_mem  = app_thread_stack,
+    .stack_size = sizeof(app_thread_stack),
+    .priority   = osPriorityNormal,
+};
+
+static void app_thread(void *argument)
+{
+    (void)argument;
+    app_main();
+    for (;;) {
+        osDelay(osWaitForever);
+    }
+}
+#endif
 
 int main(void)
 {
@@ -74,5 +99,15 @@ int main(void)
     ethos_setup();
     #endif
 
+#ifdef RTE_CMSIS_RTOS2
+    /* The SDS Stream component (frame recording over RTT) needs CMSIS-RTOS2:
+       run the application in an RTX thread. Its stack lives in the bulk SRAM
+       next to the runner's pools; the DTCM is full with the G-buffer. */
+    osKernelInitialize();
+    osThreadNew(app_thread, NULL, &app_thread_attr);
+    osKernelStart();
+    for (;;) {}
+#else
     return app_main();
+#endif
 }

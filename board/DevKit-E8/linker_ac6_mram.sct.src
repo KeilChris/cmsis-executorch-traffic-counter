@@ -16,7 +16,7 @@
 #define __RAM_BASE      APP_DTCM_BASE
 #define __RAM_SIZE      APP_HP_DTCM_SIZE
 
-#define __STACK_SIZE    0x00008000   /* 32 kB: ExecuTorch method execution needs more than the pack default */
+#define __STACK_SIZE    0x00004000   /* 16 kB for main and the exception handlers; app_main runs in an RTX thread with its own 32 kB stack (main.c) */
 #define __HEAP_SIZE     APP_HP_HEAP_SIZE
 #define __APP_HEAP_SIZE 0x00008000
 

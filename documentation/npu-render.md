@@ -161,6 +161,81 @@ RGB888, 480x800 at 60 fps, and the panel variant. The app defines
 come from the layer, so the same `app_main.cpp` builds headless for the
 FVP.
 
+## Recording a video of the target with SDS
+
+The DevKit-E8 build records what the panel shows through the
+[SDS-Framework](https://github.com/ARM-software/SDS-Framework): the runner
+opens two SDS streams over the J-Link OB's RTT channel 1, `NpuRender` with
+one 240x400 RGB888 frame per record (the 480x800 frame buffer box-downscaled
+2x2, since the NPU output is a 2x bilinear upscale of a 240x400 image anyway)
+and `Timing` with one record of per-stage microsecond timings per frame.
+SDSIO-Server writes them as `.sds` files, `sds-convert` turns the frame
+stream into an MP4 and `sds-view` plots the timings. The animation advances
+by 1/50 s per frame, so a 50 fps video plays in real time whatever the
+recording rate was.
+
+What the board layer adds (`board/DevKit-E8/Board-U85.clayer.yml`):
+`SDS:Stream&CMSIS-RTOS2`, `SDS:IO:RTT`, `SEGGER:RTT`, and, because the SDS
+Stream component needs CMSIS-RTOS2, `CMSIS:RTOS2:Keil RTX5&Source` with the
+SysTick OS tick; `main.c` runs `app_main` in an RTX thread with a 32 kB
+stack in the bulk SRAM, the handler stack shrinks to 16 kB. The config
+files are in `board/DevKit-E8/RTE/{CMSIS,SDS,SEGGER}`: a 16 kB RTT up
+buffer, 2 kB down, 16 kB RTX dynamic memory, 4 streams.
+
+How the runner records (`src/app_main.cpp`, `APP_HAS_SDS`): at start it
+calls `sdsInit` and `sdsOpen`; if no SDSIO-Server answers within 5 s it
+prints "not recording" and runs the demo as before. Otherwise it records the
+first `APP_SDS_RECORD_FRAMES` frames (300, 6 s of video). No memory is
+free for a frame-sized stream buffer, so while recording the display is
+single-buffered on frame buffer 0 and frame buffer 1 (1.15 MB) is the SDS
+stream buffer: up to three frames queue there and the SDS thread drains
+them over RTT while the next frame renders; when it is full the runner
+waits (`SDS_NO_SPACE`, `osDelay`). The 2x2 downscale is staged in the NPU
+temp pool, idle between NPU calls. After the last frame both streams are
+closed (flushed) and the display goes back to double buffering. The RTT
+throughput sets the recording rate, not the renderer.
+
+Host side, in this order (the runner's `sdsOpen` gives the server 5 s):
+
+```bash
+# 1. Halt the board at its reset vector (J-Link attaches reliably only then)
+pyocd commander --cbuild-run out/cmsis-executorch+DevKit-E8.cbuild-run.yml -c "reset halt"
+# 2. RTT bridge: J-Link DLL via pylink, TCP on 19021; resumes the CPU when the server connects
+.venv/bin/python tools/sdsio_rtt_bridge.py --device AE822FA0E5597LS0_M55_HP \
+    --rtt-addr $(grep -o "0x[0-9a-f]* *0x000000a8 *Zero *RW.*_SEGGER_RTT" out/cmsis-executorch/DevKit-E8/Debug/cmsis-executorch.axf.map | cut -d' ' -f1)
+# 3. SDSIO-Server in connect mode, files land in recordings/
+.venv/bin/python ~/.cache/arm/packs/ARM/SDS/3.1.0/utilities/sdsio-server.py socket --port 19021 --connect --workdir recordings
+# 4. When the console says "SDS: recording closed", convert
+.venv/bin/python ~/.cache/arm/packs/ARM/SDS/3.1.0/utilities/sds-convert.py video \
+    -i recordings/NpuRender.0.sds -o recordings/npu-render -y recordings/NpuRender.sds.yml
+```
+
+The `_SEGGER_RTT` address comes from the linker map because the J-Link's
+RAM search does not cover the M55_HP DTCM. The utilities need
+`pyserial opencv-python pyyaml pandas ifaddr libusb1 pylink-square` in the
+venv (`uv pip install --python .venv/bin/python ...`).
+
+Why the bridge instead of J-Link Commander's RTT telnet server: with
+JLinkExe attached and SDSIO-Server on `--connect '$$SEGGER_TELNET_ConfigStr=RTTCh;1$$'`
+against port 19021, the stream ran at 28 kB/s and lost bytes after four
+frames every time ("Data integrity error - protocol mismatch"), while a
+raw J-Link read of 256 kB takes about a second once the core is found on
+AP[3]. The bridge polls the RTT up buffer directly through the DLL. pylink
+must load the DLL of the installed JLinkExe (V9.24 here): its default pick
+was an older V8.24 install that does not know the Alif device.
+
+Pitfalls seen on the way:
+
+- J-Link's own reset (`r`) on this board falls back to VECTRESET or the
+  reset pin and did not restart the application reliably; pyOCD's
+  `reset halt` followed by a J-Link `g` did.
+- Attaching J-Link or pyOCD to a running application failed intermittently
+  ("Could not find core in Coresight setup"). Halt with pyOCD first.
+- After several aborted attaches the SoC stopped powering up its debug
+  domain altogether (J-Link: SW-DP found, "Failed to power up DAP"; pyOCD:
+  "Not supported by current CPU + target interface combination") and the
+  console went silent: only a power cycle of the board recovers that.
+
 ## Running it
 
 Same three steps as the README, on the `DevKit-E8` target-type:

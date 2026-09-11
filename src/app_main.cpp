@@ -60,6 +60,10 @@
 #ifdef APP_HAS_DISPLAY
 #include "board_display.h"
 #endif
+#ifdef APP_HAS_SDS
+#include "cmsis_os2.h"
+#include "sds.h"
+#endif
 
 #ifndef __ARM_FEATURE_MVE
 #error "This runner is written with Helium (MVE) intrinsics; build for a core with MVE (Cortex-M55/M85)."
@@ -142,6 +146,50 @@ alignas(16) uint16_t g_zbuffer[kPixels] APP_POOL_ATTRIBUTES;  // NDC depth in 1/
 
 // Two RGB888 frame buffers the display controller scans out.
 alignas(32) uint8_t g_framebuffer[2][kFrameBytes] APP_FRAMEBUFFER_ATTRIBUTES;
+
+#ifdef APP_HAS_SDS
+// SDS recording (documentation/npu-render.md, "Recording a video"): the
+// rendered frames, downscaled 2x2 to 240x400 RGB888, go out as one record
+// per frame on the "NpuRender" stream, and a "Timing" record per frame next
+// to them; SDSIO-Server writes the .sds files, sds-convert makes the video.
+// While recording the display is single-buffered on frame buffer 0, and
+// frame buffer 1 (1.15 MB) is the stream buffer: up to three frames queue
+// there while the SDS thread drains them over RTT. The downscaled frame is
+// staged in the NPU temp pool, which is idle between NPU calls.
+#ifndef APP_SDS_RECORD_FRAMES
+#define APP_SDS_RECORD_FRAMES 300  // 6 s at the animation's 50 steps per second
+#endif
+constexpr int kRecordDiv = 2;
+constexpr int kRecordWidth = kFrameWidth / kRecordDiv, kRecordHeight = kFrameHeight / kRecordDiv;
+constexpr size_t kRecordBytes = static_cast<size_t>(kRecordWidth) * kRecordHeight * 3;
+constexpr uint32_t kRecordPeriodMs = 20;  // the animation steps t by 1/50 s per frame
+static_assert(kRecordBytes + 8 <= kFrameBytes, "a frame record must fit the stream buffer");
+static_assert(kRecordBytes <= kTempPoolSize, "the staging frame must fit the temp pool");
+struct TimingRecord {
+  uint32_t frame;
+  float vertex_us, post_us, raster_us, shade_us, record_us, frame_us;
+};
+alignas(16) uint8_t g_timing_buffer[4096];
+volatile bool g_sds_io_error = false;
+
+void sds_event(sdsId_t, uint32_t event) {  // from the SDS thread: the link to the server is gone
+  if (event == SDS_EVENT_ERROR_IO) g_sds_io_error = true;
+}
+
+void downscale_frame(const uint8_t* frame, uint8_t* out) {  // 2x2 box mean, RGB888 -> RGB888
+  for (int y = 0; y < kRecordHeight; ++y) {
+    const uint8_t* r0 = frame + static_cast<size_t>(2 * y) * kFrameWidth * 3;
+    const uint8_t* r1 = r0 + kFrameWidth * 3;
+    uint8_t* o = out + static_cast<size_t>(y) * kRecordWidth * 3;
+    for (int x = 0; x < kRecordWidth; ++x) {
+      for (int c = 0; c < 3; ++c) {
+        int i = 6 * x + c;
+        o[3 * x + c] = static_cast<uint8_t>((r0[i] + r0[i + 3] + r1[i] + r1[i + 3] + 2) >> 2);
+      }
+    }
+  }
+}
+#endif
 
 // Per-frame CPU-side vertex data derived from the NPU output.
 struct ScreenVertex {
@@ -936,10 +984,31 @@ extern "C" int app_main(void) {
   const int report_every = 1;
 #endif
 
+#ifdef APP_HAS_SDS
+  // Recording starts only if an SDSIO-Server answers on the RTT channel
+  // (the open times out after 5 s otherwise) and runs for the first frames.
+  sdsId_t rec_frames = nullptr, rec_timing = nullptr;
+  int record_frames = 0;
+  if (display_on) {
+    sdsInit(sds_event);
+    rec_frames = sdsOpen("NpuRender", sdsModeWrite, g_framebuffer[1], kFrameBytes);
+    if (rec_frames != nullptr) rec_timing = sdsOpen("Timing", sdsModeWrite, g_timing_buffer, sizeof(g_timing_buffer));
+    if (rec_frames == nullptr || rec_timing == nullptr) {
+      printf("  SDS: no SDSIO-Server on the RTT channel, not recording\n");
+      if (rec_frames != nullptr) sdsClose(rec_frames);
+      rec_frames = nullptr;
+    } else {
+      record_frames = APP_SDS_RECORD_FRAMES;
+      printf("  SDS: recording %d frames as %dx%d RGB888 (stream NpuRender) and their timings (stream Timing); "
+             "the display is single-buffered meanwhile\n", record_frames, kRecordWidth, kRecordHeight);
+    }
+  }
+#endif
+
   const Mat4 projection = mat_perspective(62.0f * 3.14159265f / 180.0f,
                                           static_cast<float>(kWidth) / kHeight, 1.0f, 8.0f);
   uint32_t sum_vertex = 0, sum_vertex_copy = 0, sum_post = 0, sum_raster = 0, sum_clear = 0;
-  uint32_t sum_shade = 0, sum_shade_copy = 0, sum_vsync = 0, sum_frame = 0, sum_check = 0;
+  uint32_t sum_shade = 0, sum_shade_copy = 0, sum_vsync = 0, sum_frame = 0, sum_check = 0, sum_record = 0;
   int report_frames = 0;
   float worst_error = 0.0f;
   RasterStats last_stats{0, 0, 0};
@@ -1031,7 +1100,31 @@ extern "C" int app_main(void) {
       SCB_CleanDCache_by_Addr(g_framebuffer[back], static_cast<int32_t>(kFrameBytes));
       display_present(g_framebuffer[back]);
       g_frame_target_free_after = display_frame_count();  // the other buffer is free once a new frame has started
-      back ^= 1;
+#ifdef APP_HAS_SDS
+      if (record_frames == 0)  // single-buffered while frame buffer 1 is the SDS stream buffer
+#endif
+        back ^= 1;
+    }
+#endif
+
+    // 6b. Record the frame (SDS): downscale into the idle temp pool, queue it
+    //     as one record; wait when the stream buffer still holds three frames.
+    uint32_t t_record = 0;
+#ifdef APP_HAS_SDS
+    if (record_frames > 0) {
+      t0 = cycles();
+      downscale_frame(frame_rgb, g_temp_pool);
+      int32_t written;
+      do {
+        written = sdsWrite(rec_frames, frame * kRecordPeriodMs, g_temp_pool, kRecordBytes);
+        if (written == SDS_NO_SPACE && !g_sds_io_error) osDelay(1);
+      } while (written == SDS_NO_SPACE && !g_sds_io_error);
+      t_record = cycles() - t0;
+      if (written < 0 || g_sds_io_error) {
+        printf("  SDS: %s after frame %d, recording stopped\n",
+               g_sds_io_error ? "I/O error on the RTT link" : "frame write failed", frame);
+        record_frames = 1;  // closes below
+      }
     }
 #endif
 
@@ -1049,21 +1142,34 @@ extern "C" int app_main(void) {
     }
     uint32_t t_total = cycles() - t_frame;
 
+#ifdef APP_HAS_SDS
+    if (record_frames > 0) {
+      const TimingRecord timing{static_cast<uint32_t>(frame), us(t_vertex), us(t_post), us(t_raster), us(t_shade),
+                                us(t_record), us(t_total)};
+      sdsWrite(rec_timing, frame * kRecordPeriodMs, &timing, sizeof(timing));
+      if (--record_frames == 0) {
+        sdsClose(rec_timing);  // flushes; frame buffer 1 returns to the display next frame
+        sdsClose(rec_frames);
+        printf("  SDS: recording closed after frame %d\n", frame);
+      }
+    }
+#endif
+
     sum_vertex += t_vertex; sum_vertex_copy += t_vertex_copy; sum_post += t_post;
     sum_raster += t_raster; sum_clear += t_clear; sum_shade += t_shade; sum_shade_copy += t_shade_copy;
-    sum_vsync += t_vsync; sum_frame += t_total; sum_check += t_check;
+    sum_vsync += t_vsync; sum_frame += t_total; sum_check += t_check; sum_record += t_record;
     ++report_frames;
     last_stats = stats;
 
     if ((frame % report_every) == report_every - 1) {
       float n = static_cast<float>(report_frames);
       printf("frames %d..%d avg: vertex-NPU %.0f us (copy %.0f) | post-vertex %.0f us | raster %.0f us (clear %.0f; %d box px, %d covered, %d tris) | "
-             "shade-NPU %.0f us (frame copy %.0f, vsync wait %.0f) | check %.0f us | frame %.1f ms = %.1f fps | max err %.1f/255\n",
+             "shade-NPU %.0f us (frame copy %.0f, vsync wait %.0f) | check %.0f us | record %.0f us | frame %.1f ms = %.1f fps | max err %.1f/255\n",
              frame - report_frames + 1, frame, us(sum_vertex / n), us(sum_vertex_copy / n), us(sum_post / n),
              us(sum_raster / n), us(sum_clear / n), last_stats.pixels_tested, last_stats.pixels_covered, last_stats.triangles_drawn,
-             us(sum_shade / n), us(sum_shade_copy / n), us(sum_vsync / n), us(sum_check),
+             us(sum_shade / n), us(sum_shade_copy / n), us(sum_vsync / n), us(sum_check), us(sum_record / n),
              us(sum_frame / n) / 1000.0f, 1.0e6f / us(sum_frame / n), worst_error * 255.0f);
-      sum_vertex = sum_vertex_copy = sum_post = sum_raster = sum_clear = sum_shade = sum_shade_copy = sum_vsync = sum_frame = sum_check = 0;
+      sum_vertex = sum_vertex_copy = sum_post = sum_raster = sum_clear = sum_shade = sum_shade_copy = sum_vsync = sum_frame = sum_check = sum_record = 0;
       report_frames = 0;
     }
     if (!display_on && frame == frame_limit - 1) {
