@@ -115,14 +115,16 @@ Repeat this after another project has reprogrammed the table.
        MACs/cc:    256
        Cmd stream: v1
    NPU render: Ethos-U85 as a tensor coprocessor for a 3D pipeline, Helium on the CPU
-     program: 7696 bytes, 2 objects x 512 vertices, G-buffer 240x400 int8, frame 480x800 RGB888
-     scene: torus 512 + sphere 480 vertices, 1920 triangles
+     program: 18192 bytes, 8 objects x 512 vertices, G-buffer 240x400 int8, frame 480x800 RGB888
+     scene: 8 objects, 2208 vertices, 4224 triangles (12672 index slots)
      display: 480x800 RGB888 on (status 0)
-   frames 0..119 avg: vertex-NPU 148 us (copy 43) | post-vertex 182 us | raster 9766 us (...) | shade-NPU 8118 us (frame copy 2531, vsync wait 2) | check 1752 us | frame 18.9 ms = 53.0 fps | max err 1.6/255
+   frames 0..119 avg: vertex-NPU 339 us (copy 169) | post-vertex 677 us | raster 18520 us (...) | shade-NPU 24731 us (frame copy 2529, vsync wait 0) | check 63561 us | frame 45.4 ms = 22.0 fps | max err 2.6/255
    ```
 
-   and the board's LCD shows a lit, fogged torus with a sphere orbiting it,
-   shaded and upscaled by the NPU, rasterized by the M55 with Helium.
+   and the board's LCD shows two interlocked tori, a sphere weaving through
+   them and five small bodies orbiting the whole: lit by three lights with
+   highlights, ambient occlusion, fog and bloom by the NPU, rasterized by
+   the M55 with Helium.
 
 3. Set a breakpoint after `module.execute(MODEL_SHADE_METHOD, ...)` in
    `src/app_main.cpp` and inspect the G-buffer or the frame buffer, or ask
@@ -153,6 +155,10 @@ target-set to `FVP_Corstone_SSE-320`.
   out/cmsis-executorch+DevKit-E8.cbuild-run.yml`, or the CMSIS Developer
   Assistant's flash tool), which uses the pack's flash algorithm and leaves
   the Secure Enclave's table of contents untouched, then Debug or reset.
+  pyOCD has done the same once while the previous image was running: check
+  that the word at `0x80200004` is a `0x8020xxxx` address after programming
+  (`pyocd commander ... -c "read32 0x80200000 16"`); if not, `reset halt`
+  first and program again.
 - **`app-write-mram` gets no answer:** press reset while it waits, check SW4
   is on `SEUART`, close any terminal holding the port.
 - **"torch is not installed":** run the task **Setup Python virtual

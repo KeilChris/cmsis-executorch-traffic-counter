@@ -13,9 +13,11 @@
 //   CPU   perspective divide (Helium), back-face culling, edge-function
 //         rasterization four pixels at a time (Helium) into an int8 planar
 //         240x400 G-buffer (normal, albedo, fog) with a 16-bit z-buffer
-//   NPU   "shade": deferred Lambert lighting + ambient + depth fog + a 3x3
-//         Gaussian post filter, a 2x bilinear upscale to 480x800 and a
-//         transpose to interleaved RGB888, int8
+//   NPU   "shade": deferred shading with three coloured lights, a Blinn-
+//         Phong highlight, screen-space ambient occlusion from the depth
+//         plane, depth fog, a quarter-resolution bloom pass, a 5x5 Gaussian
+//         post filter, a 2x bilinear upscale to 480x800 and a transpose to
+//         interleaved RGB888, int8
 //   CPU   the NPU backend's output copy is routed (Helium, with the int8 ->
 //         uint8 offset folded in) straight into the back frame buffer, which
 //         the CDC200 display controller scans out at the next vertical blank
@@ -149,19 +151,24 @@ struct ScreenVertex {
   float nx, ny, nz;  // view-space normal
   bool visible;   // in front of the near plane
 };
-ScreenVertex g_screen[kObjects * kMaxVertices];
+ScreenVertex g_screen[kObjects * kMaxVertices] APP_POOL_ATTRIBUTES;  // 128 kB: bulk SRAM, the DTCM holds the G-buffer
 
 // Linear fog on view-space depth, written to the G-buffer depth channel (the
 // shade method's fog factor).
 constexpr float kFogStart = 2.0f, kFogEnd = 6.5f;
 
 // ---------------------------------------------------------------------------
-// Scene: a checkered torus and a striped sphere orbiting it.
+// Scene: two interlocked checkered tori (chain links), a striped sphere
+// weaving through them, four small moons and a thin ring on tilted orbits:
+// eight objects, one vertex batch each, 4224 triangles.
 // ---------------------------------------------------------------------------
 struct Vertex {
   float x, y, z;
   float nx, ny, nz;
   float r, g, b;  // albedo in [0, 1]
+};
+struct Color {
+  float r, g, b;
 };
 struct Mesh {
   int first_vertex;  // into g_vertices / the NPU batch (object * kMaxVertices)
@@ -170,87 +177,93 @@ struct Mesh {
   int triangle_count;
 };
 
-constexpr int kTorusRings = 32, kTorusSegments = 16;  // 512 vertices, 1024 triangles
+constexpr int kSceneObjects = 8;
+constexpr int kTorusRings = 32, kTorusSegments = 16;  // 512 vertices, 1024 triangles, twice
 constexpr int kSphereStacks = 14, kSphereSlices = 32;  // 480 vertices, 896 triangles
-constexpr int kMaxTriangles = 2 * kTorusRings * kTorusSegments + 2 * kSphereStacks * kSphereSlices;
+constexpr int kMoons = 4, kMoonStacks = 8, kMoonSlices = 16;  // 144 vertices, 256 triangles each
+constexpr int kRingRings = 16, kRingSegments = 8;  // 128 vertices, 256 triangles
+constexpr int kMaxTriangles = 2 * (2 * kTorusRings * kTorusSegments) + 2 * kSphereStacks * kSphereSlices +
+                              kMoons * (2 * kMoonStacks * kMoonSlices) + 2 * kRingRings * kRingSegments;
 static_assert(kTorusRings * kTorusSegments <= kMaxVertices, "torus does not fit the vertex batch");
 static_assert((kSphereStacks + 1) * kSphereSlices <= kMaxVertices, "sphere does not fit the vertex batch");
-static_assert(kObjects >= 2, "the scene has two objects");
+static_assert(kObjects >= kSceneObjects, "the scene has more objects than the vertex batch");
 
-Vertex g_vertices[kObjects * kMaxVertices];
+Vertex g_vertices[kObjects * kMaxVertices] APP_POOL_ATTRIBUTES;  // 147 kB: bulk SRAM
 uint16_t g_indices[kMaxTriangles * 3];
 Mesh g_meshes[kObjects];
 
-void build_torus(Mesh& mesh, int first_vertex, int first_index, float major, float minor) {
-  mesh.first_vertex = first_vertex;
-  mesh.vertex_count = kTorusRings * kTorusSegments;
+// Both builders fill vertex batch `object`, write their triangles from
+// `first_index` and return the index slot after them.
+int build_torus(Mesh& mesh, int object, int first_index, int rings, int segments, float major, float minor,
+                Color a, Color b, int check) {
+  mesh.first_vertex = object * kMaxVertices;
+  mesh.vertex_count = rings * segments;
   mesh.first_index = first_index;
-  mesh.triangle_count = 2 * kTorusRings * kTorusSegments;
-  for (int i = 0; i < kTorusRings; ++i) {
-    float u = 2.0f * 3.14159265f * i / kTorusRings;
+  mesh.triangle_count = 2 * rings * segments;
+  for (int i = 0; i < rings; ++i) {
+    float u = 2.0f * 3.14159265f * i / rings;
     float cu = cosf(u), su = sinf(u);
-    for (int j = 0; j < kTorusSegments; ++j) {
-      float v = 2.0f * 3.14159265f * j / kTorusSegments;
+    for (int j = 0; j < segments; ++j) {
+      float v = 2.0f * 3.14159265f * j / segments;
       float cv = cosf(v), sv = sinf(v);
-      Vertex& vert = g_vertices[first_vertex + i * kTorusSegments + j];
+      Vertex& vert = g_vertices[mesh.first_vertex + i * segments + j];
       vert.x = (major + minor * cv) * cu;
       vert.y = minor * sv;
       vert.z = (major + minor * cv) * su;
       vert.nx = cv * cu;
       vert.ny = sv;
       vert.nz = cv * su;
-      bool check = ((i / 4) + (j / 4)) % 2 == 0;
-      vert.r = check ? 0.92f : 0.16f;
-      vert.g = check ? 0.48f : 0.42f;
-      vert.b = check ? 0.10f : 0.90f;
+      const Color& c = ((i / check) + (j / check)) % 2 == 0 ? a : b;
+      vert.r = c.r; vert.g = c.g; vert.b = c.b;
     }
   }
   int t = first_index;
-  for (int i = 0; i < kTorusRings; ++i) {
-    int i1 = (i + 1) % kTorusRings;
-    for (int j = 0; j < kTorusSegments; ++j) {
-      int j1 = (j + 1) % kTorusSegments;
-      uint16_t a = i * kTorusSegments + j, b = i1 * kTorusSegments + j;
-      uint16_t c = i1 * kTorusSegments + j1, d = i * kTorusSegments + j1;
-      g_indices[t++] = a; g_indices[t++] = b; g_indices[t++] = c;
-      g_indices[t++] = a; g_indices[t++] = c; g_indices[t++] = d;
+  for (int i = 0; i < rings; ++i) {
+    int i1 = (i + 1) % rings;
+    for (int j = 0; j < segments; ++j) {
+      int j1 = (j + 1) % segments;
+      uint16_t p = i * segments + j, q = i1 * segments + j;
+      uint16_t r = i1 * segments + j1, w = i * segments + j1;
+      g_indices[t++] = p; g_indices[t++] = q; g_indices[t++] = r;
+      g_indices[t++] = p; g_indices[t++] = r; g_indices[t++] = w;
     }
   }
+  return t;
 }
 
-void build_sphere(Mesh& mesh, int first_vertex, int first_index, float radius) {
-  mesh.first_vertex = first_vertex;
-  mesh.vertex_count = (kSphereStacks + 1) * kSphereSlices;
+int build_sphere(Mesh& mesh, int object, int first_index, int stacks, int slices, float radius, Color a, Color b,
+                 int stripe) {
+  mesh.first_vertex = object * kMaxVertices;
+  mesh.vertex_count = (stacks + 1) * slices;
   mesh.first_index = first_index;
-  mesh.triangle_count = 2 * kSphereStacks * kSphereSlices;
-  for (int i = 0; i <= kSphereStacks; ++i) {
-    float phi = 3.14159265f * i / kSphereStacks;  // 0 at the north pole
+  mesh.triangle_count = 2 * stacks * slices;
+  for (int i = 0; i <= stacks; ++i) {
+    float phi = 3.14159265f * i / stacks;  // 0 at the north pole
     float sp = sinf(phi), cp = cosf(phi);
-    for (int j = 0; j < kSphereSlices; ++j) {
-      float theta = 2.0f * 3.14159265f * j / kSphereSlices;
-      Vertex& vert = g_vertices[first_vertex + i * kSphereSlices + j];
+    for (int j = 0; j < slices; ++j) {
+      float theta = 2.0f * 3.14159265f * j / slices;
+      Vertex& vert = g_vertices[mesh.first_vertex + i * slices + j];
       vert.nx = sp * cosf(theta);
       vert.ny = cp;
       vert.nz = sp * sinf(theta);
       vert.x = radius * vert.nx;
       vert.y = radius * vert.ny;
       vert.z = radius * vert.nz;
-      bool stripe = (i / 2) % 2 == 0;
-      vert.r = stripe ? 0.95f : 0.20f;
-      vert.g = stripe ? 0.90f : 0.75f;
-      vert.b = stripe ? 0.85f : 0.55f;
+      const Color& c = (i / stripe) % 2 == 0 ? a : b;
+      vert.r = c.r; vert.g = c.g; vert.b = c.b;
     }
   }
   int t = first_index;
-  for (int i = 0; i < kSphereStacks; ++i) {
-    for (int j = 0; j < kSphereSlices; ++j) {
-      int j1 = (j + 1) % kSphereSlices;
-      uint16_t a = i * kSphereSlices + j, b = (i + 1) * kSphereSlices + j;
-      uint16_t c = (i + 1) * kSphereSlices + j1, d = i * kSphereSlices + j1;
-      g_indices[t++] = a; g_indices[t++] = b; g_indices[t++] = c;
-      g_indices[t++] = a; g_indices[t++] = c; g_indices[t++] = d;
+  for (int i = 0; i < stacks; ++i) {
+    for (int j = 0; j < slices; ++j) {
+      int j1 = (j + 1) % slices;
+      uint16_t p = i * slices + j, q = (i + 1) * slices + j;
+      uint16_t r = (i + 1) * slices + j1, w = i * slices + j1;
+      g_indices[t++] = p; g_indices[t++] = q; g_indices[t++] = r;
+      g_indices[t++] = p; g_indices[t++] = r; g_indices[t++] = w;
     }
   }
+  return t;
 }
 
 // ---------------------------------------------------------------------------
@@ -562,40 +575,179 @@ RasterStats rasterize() {
 
 // ---------------------------------------------------------------------------
 // Reference shading, mirroring model/model.py in float from the quantized
-// G-buffer, for a check of the NPU output on a grid of frame pixels.
+// G-buffer, for a check of the NPU output on a grid of frame pixels. The
+// constants are the module's.
 // ---------------------------------------------------------------------------
-constexpr float kLightDir[3] = {0.30f, 0.50f, -0.81f};  // = LIGHT_DIR in model/model.py
-constexpr float kKeyLight = 0.8f, kAmbient = 0.2f;
+constexpr float kLightDir[3][3] = {{0.30f, 0.50f, -0.81f}, {-0.60f, 0.10f, -0.79f}, {0.20f, 0.60f, 0.77f}};
+constexpr float kLightColor[3][3] = {{0.80f, 0.72f, 0.60f}, {0.15f, 0.22f, 0.35f}, {0.55f, 0.35f, 0.60f}};
+constexpr float kAmbient[3] = {0.12f, 0.13f, 0.16f};
+constexpr float kHalfVector[3] = {0.15776150f, 0.26293584f, -0.95182774f};  // key light + view direction
+constexpr float kSpecColor[3] = {0.90f, 0.90f, 0.85f};
+constexpr int kSpecPower = 16;
+constexpr int kAoRadius = 3;
+constexpr float kAoStrength = 6.0f;
 constexpr float kFogColor[3] = {0.10f, 0.12f, 0.18f};
+constexpr float kBloomThreshold = 0.55f, kBloomGain = 0.7f;
+constexpr int kBloomDown = 4;
+constexpr float kGauss1D[5] = {1.0f, 4.0f, 6.0f, 4.0f, 1.0f};  // 5x5 kernel = outer product / 256
 constexpr int kUpscale = kFrameWidth / kWidth;
+constexpr int kBloomWidth = kWidth / kBloomDown, kBloomHeight = kHeight / kBloomDown;
 
-void reference_color(int x, int y, float rgb[3]) {  // lit colour of one G-buffer pixel
+// The bloom reference at quarter resolution, 72 kB, rebuilt per check.
+float g_bloom_ref[kBloomHeight * kBloomWidth * 3] APP_POOL_ATTRIBUTES;
+
+inline float depth_at(int x, int y) {
+  return dequantize(g_depth[y * kWidth + x], MODEL_SHADE_INPUT2_SCALE, MODEL_SHADE_INPUT2_ZERO_POINT);
+}
+
+// The 7x7 box sum of the depth codes (zero padding), separable, into the
+// z-buffer: it is free once the frame is rasterized, and a 16-bit sum of 49
+// codes fits. Called once per check; the AO reference then costs two loads.
+void build_depth_box_sum() {
+  constexpr int box = 2 * kAoRadius + 1;
+  for (int y = 0; y < kHeight; ++y) {  // horizontal pass: sums of up to 7 codes per pixel
+    const int8_t* row = g_depth + y * kWidth;
+    uint16_t* out = g_zbuffer + y * kWidth;
+    for (int x = 0; x < kWidth; ++x) {
+      int sum = 0;
+      for (int dx = -kAoRadius; dx <= kAoRadius; ++dx) {
+        int sx = x + dx;
+        if (sx >= 0 && sx < kWidth) sum += row[sx] - MODEL_SHADE_INPUT2_ZERO_POINT;
+      }
+      out[x] = static_cast<uint16_t>(sum);
+    }
+  }
+  uint16_t ring[box][kWidth];  // vertical pass in place: the rows still needed after being overwritten
+  for (int y = 0; y < kHeight; ++y) {
+    memcpy(ring[y % box], g_zbuffer + y * kWidth, sizeof(ring[0]));
+    int y_out = y - kAoRadius;  // this row's sum is complete once row y_out + kAoRadius is in the ring
+    if (y_out < 0) continue;
+    uint16_t* out = g_zbuffer + y_out * kWidth;
+    for (int x = 0; x < kWidth; ++x) {
+      int sum = 0;
+      for (int sy = y_out - kAoRadius; sy <= y_out + kAoRadius; ++sy) {
+        if (sy >= 0 && sy <= y) sum += ring[sy % box][x];
+      }
+      out[x] = static_cast<uint16_t>(sum);
+    }
+  }
+  for (int y_out = kHeight - kAoRadius; y_out < kHeight; ++y_out) {  // the last rows: the ring holds everything
+    uint16_t* out = g_zbuffer + y_out * kWidth;
+    for (int x = 0; x < kWidth; ++x) {
+      int sum = 0;
+      for (int sy = y_out - kAoRadius; sy < kHeight; ++sy) sum += ring[sy % box][x];
+      out[x] = static_cast<uint16_t>(sum);
+    }
+  }
+}
+
+float ambient_occlusion(int x, int y) {  // 1 - strength * relu(depth - box-blurred depth), zero padding
+  constexpr float box = 2 * kAoRadius + 1;
+  float mean = g_zbuffer[y * kWidth + x] * MODEL_SHADE_INPUT2_SCALE / (box * box);
+  float occlusion = std::max(0.0f, depth_at(x, y) - mean);
+  return std::min(std::max(1.0f - kAoStrength * occlusion, 0.0f), 1.0f);
+}
+
+void reference_color(int x, int y, float rgb[3]) {  // lit + fogged colour of one G-buffer pixel, before bloom
   int p = y * kWidth + x;
   float n[3], a[3];
   for (int c = 0; c < 3; ++c) {
     n[c] = dequantize(g_normal[c * kPixels + p], MODEL_SHADE_INPUT0_SCALE, MODEL_SHADE_INPUT0_ZERO_POINT);
     a[c] = dequantize(g_albedo[c * kPixels + p], MODEL_SHADE_INPUT1_SCALE, MODEL_SHADE_INPUT1_ZERO_POINT);
   }
-  float d = dequantize(g_depth[p], MODEL_SHADE_INPUT2_SCALE, MODEL_SHADE_INPUT2_ZERO_POINT);
-  float ndotl = std::max(0.0f, n[0] * kLightDir[0] + n[1] * kLightDir[1] + n[2] * kLightDir[2]);
-  float light = ndotl * kKeyLight + kAmbient;
-  for (int c = 0; c < 3; ++c) rgb[c] = a[c] * light * (1.0f - d) + kFogColor[c] * d;
+  float d = depth_at(x, y);
+  float light[3] = {kAmbient[0], kAmbient[1], kAmbient[2]};
+  for (int l = 0; l < 3; ++l) {
+    float ndotl = std::max(0.0f, n[0] * kLightDir[l][0] + n[1] * kLightDir[l][1] + n[2] * kLightDir[l][2]);
+    for (int c = 0; c < 3; ++c) light[c] += ndotl * kLightColor[l][c];
+  }
+  float spec = std::max(0.0f, n[0] * kHalfVector[0] + n[1] * kHalfVector[1] + n[2] * kHalfVector[2]);
+  for (int p2 = 2; p2 <= kSpecPower; p2 *= 2) spec *= spec;  // spec^kSpecPower, a power of two
+  float ao = ambient_occlusion(x, y);
+  for (int c = 0; c < 3; ++c) {
+    float lit = a[c] * light[c] * ao + spec * kSpecColor[c];
+    rgb[c] = lit * (1.0f - d) + kFogColor[c] * d;
+  }
 }
 
-void reference_filtered(int x, int y, float rgb[3]) {  // after the 3x3 Gaussian, clamped
-  static const float kernel[9] = {1, 2, 1, 2, 4, 2, 1, 2, 1};
+// One 5-tap Gaussian pass along x or y, in place, zero padding. Two passes
+// are the separable 5x5 kernel; the zero padding commutes with the split.
+void gauss_1d_inplace(float* plane, int width, int height, bool along_x) {
+  const int lines = along_x ? height : width, taps = along_x ? width : height;
+  const int step = along_x ? 3 : kBloomWidth * 3;
+  float line[kBloomHeight * 3];  // the longer axis
+  for (int l = 0; l < lines; ++l) {
+    float* base = plane + (along_x ? l * kBloomWidth : l) * 3;
+    for (int i = 0; i < taps * 3; ++i) line[i] = base[(i / 3) * step + i % 3];
+    for (int i = 0; i < taps; ++i) {
+      for (int c = 0; c < 3; ++c) {
+        float acc = 0.0f;
+        for (int k = -2; k <= 2; ++k) {
+          int j = i + k;
+          if (j >= 0 && j < taps) acc += kGauss1D[k + 2] / 16.0f * line[j * 3 + c];
+        }
+        base[i * step + c] = acc;
+      }
+    }
+  }
+}
+
+void build_bloom_reference() {  // threshold, 4x4 mean pool, two 5x5 Gaussians (zero padding)
+  float* pooled = g_bloom_ref;
+  for (int by = 0; by < kBloomHeight; ++by) {
+    for (int bx = 0; bx < kBloomWidth; ++bx) {
+      float sum[3] = {0.0f, 0.0f, 0.0f};
+      for (int dy = 0; dy < kBloomDown; ++dy) {
+        for (int dx = 0; dx < kBloomDown; ++dx) {
+          float c[3];
+          reference_color(bx * kBloomDown + dx, by * kBloomDown + dy, c);
+          for (int i = 0; i < 3; ++i) sum[i] += std::max(0.0f, c[i] - kBloomThreshold);
+        }
+      }
+      for (int i = 0; i < 3; ++i) pooled[(by * kBloomWidth + bx) * 3 + i] = sum[i] / (kBloomDown * kBloomDown);
+    }
+  }
+  for (int pass = 0; pass < 2; ++pass) {
+    gauss_1d_inplace(pooled, kBloomWidth, kBloomHeight, true);
+    gauss_1d_inplace(pooled, kBloomWidth, kBloomHeight, false);
+  }
+}
+
+// Bilinear sample of a plane at (fx, fy) after an integer upscale with
+// PyTorch's align_corners=False mapping.
+void bilinear(const float* plane, int width, int height, int stride, int fx, int fy, int scale, float rgb[3]) {
+  float sx = (fx + 0.5f) / scale - 0.5f, sy = (fy + 0.5f) / scale - 0.5f;
+  sx = std::max(sx, 0.0f);
+  sy = std::max(sy, 0.0f);
+  int x0 = std::min(static_cast<int>(sx), width - 1), y0 = std::min(static_cast<int>(sy), height - 1);
+  int x1 = std::min(x0 + 1, width - 1), y1 = std::min(y0 + 1, height - 1);
+  float tx = sx - x0, ty = sy - y0;
+  for (int i = 0; i < 3; ++i) {
+    float c00 = plane[(y0 * width + x0) * stride + i], c01 = plane[(y0 * width + x1) * stride + i];
+    float c10 = plane[(y1 * width + x0) * stride + i], c11 = plane[(y1 * width + x1) * stride + i];
+    rgb[i] = (1 - ty) * ((1 - tx) * c00 + tx * c01) + ty * ((1 - tx) * c10 + tx * c11);
+  }
+}
+
+void reference_bloomed(int x, int y, float rgb[3]) {  // colour + gain * upsampled bloom, clamped
+  float glow[3];
+  bilinear(g_bloom_ref, kBloomWidth, kBloomHeight, 3, x, y, kBloomDown, glow);
+  reference_color(x, y, rgb);
+  for (int i = 0; i < 3; ++i) rgb[i] = std::min(std::max(rgb[i] + kBloomGain * glow[i], 0.0f), 1.0f);
+}
+
+void reference_filtered(int x, int y, float rgb[3]) {  // after the 5x5 Gaussian
   rgb[0] = rgb[1] = rgb[2] = 0.0f;
-  for (int dy = -1; dy <= 1; ++dy) {
-    for (int dx = -1; dx <= 1; ++dx) {
+  for (int dy = -2; dy <= 2; ++dy) {
+    for (int dx = -2; dx <= 2; ++dx) {
       int sx = x + dx, sy = y + dy;
       if (sx < 0 || sy < 0 || sx >= kWidth || sy >= kHeight) continue;  // zero padding
       float c[3];
-      reference_color(sx, sy, c);
-      float k = kernel[(dy + 1) * 3 + (dx + 1)] / 16.0f;
+      reference_bloomed(sx, sy, c);
+      float k = kGauss1D[dy + 2] * kGauss1D[dx + 2] / 256.0f;
       for (int i = 0; i < 3; ++i) rgb[i] += k * c[i];
     }
   }
-  for (int i = 0; i < 3; ++i) rgb[i] = std::min(std::max(rgb[i], 0.0f), 1.0f);
 }
 
 void reference_frame_pixel(int fx, int fy, float rgb[3]) {  // after the bilinear upscale (align_corners=False)
@@ -617,6 +769,8 @@ void reference_frame_pixel(int fx, int fy, float rgb[3]) {  // after the bilinea
 
 // Max abs error over a 12x20 grid of frame pixels; `frame` is RGB888 (uint8).
 float check_frame(const uint8_t* frame) {
+  build_depth_box_sum();  // overwrites the z-buffer, which the next frame clears anyway
+  build_bloom_reference();
   float max_err = 0.0f;
   for (int gy = 0; gy < 20; ++gy) {
     for (int gx = 0; gx < 12; ++gx) {
@@ -719,8 +873,18 @@ extern "C" int app_main(void) {
   }
 
   // Scene and the static vertex-stage inputs (quantized once).
-  build_torus(g_meshes[0], 0, 0, 0.62f, 0.24f);
-  build_sphere(g_meshes[1], kMaxVertices, g_meshes[0].triangle_count * 3, 0.30f);
+  int index = 0;
+  index = build_torus(g_meshes[0], 0, index, kTorusRings, kTorusSegments, 0.62f, 0.24f, {0.92f, 0.48f, 0.10f}, {0.16f, 0.42f, 0.90f}, 4);
+  index = build_torus(g_meshes[1], 1, index, kTorusRings, kTorusSegments, 0.62f, 0.24f, {0.20f, 0.85f, 0.55f}, {0.90f, 0.15f, 0.35f}, 4);
+  index = build_sphere(g_meshes[2], 2, index, kSphereStacks, kSphereSlices, 0.26f, {0.95f, 0.90f, 0.85f}, {0.20f, 0.75f, 0.55f}, 2);
+  const Color moon_colors[kMoons][2] = {{{0.95f, 0.30f, 0.25f}, {0.98f, 0.85f, 0.80f}},
+                                        {{0.25f, 0.55f, 0.98f}, {0.85f, 0.92f, 1.00f}},
+                                        {{0.30f, 0.90f, 0.35f}, {0.90f, 1.00f, 0.85f}},
+                                        {{0.95f, 0.80f, 0.20f}, {1.00f, 0.95f, 0.70f}}};
+  for (int m = 0; m < kMoons; ++m) {
+    index = build_sphere(g_meshes[3 + m], 3 + m, index, kMoonStacks, kMoonSlices, 0.14f, moon_colors[m][0], moon_colors[m][1], 1);
+  }
+  index = build_torus(g_meshes[7], 7, index, kRingRings, kRingSegments, 0.34f, 0.05f, {0.95f, 0.85f, 0.30f}, {0.60f, 0.50f, 0.15f}, 2);
   memset(g_pos_q, 0, sizeof(g_pos_q));
   memset(g_nrm_q, 0, sizeof(g_nrm_q));
   for (int o = 0; o < kObjects; ++o) {
@@ -739,7 +903,9 @@ extern "C" int app_main(void) {
   }
   int triangles = 0;
   for (int o = 0; o < kObjects; ++o) triangles += g_meshes[o].triangle_count;
-  printf("  scene: torus %d + sphere %d vertices, %d triangles\n", g_meshes[0].vertex_count, g_meshes[1].vertex_count, triangles);
+  int scene_vertices = 0;
+  for (int o = 0; o < kObjects; ++o) scene_vertices += g_meshes[o].vertex_count;
+  printf("  scene: %d objects, %d vertices, %d triangles (%d index slots)\n", kSceneObjects, scene_vertices, triangles, index);
 
   TensorBox pos_t(ScalarType::Short, kVertexShape, 3, g_pos_q);
   TensorBox nrm_t(ScalarType::Short, kVertexShape, 3, g_nrm_q);
@@ -787,13 +953,27 @@ extern "C" int app_main(void) {
     uint32_t t_frame = cycles();
     float t = frame * (1.0f / 50.0f);
 
-    // 1. Matrices for this frame (CPU): the torus spins, the sphere orbits it.
-    Mat4 view = mat_translate(0.0f, 0.0f, 3.4f);
-    Mat4 torus_model = mat_mul(mat_rotate_x(1.1f + 0.35f * sinf(0.7f * t)), mat_rotate_y(0.9f * t));
-    float orbit = 1.3f * t;
-    Mat4 sphere_model = mat_mul(mat_translate(0.95f * cosf(orbit), 0.55f * sinf(orbit), 0.6f * sinf(orbit)),
-                                mat_mul(mat_rotate_z(0.4f * t), mat_rotate_y(2.0f * t)));
-    const Mat4 models[2] = {mat_mul(view, torus_model), mat_mul(view, sphere_model)};
+    // 1. Matrices for this frame (CPU): the chain links spin as one, the
+    //    sphere weaves through them, the moons and the ring circle the whole
+    //    on tilted orbits.
+    const Mat4 view = mat_translate(0.0f, 0.0f, 3.4f);
+    const Mat4 links = mat_mul(mat_rotate_x(1.1f + 0.35f * sinf(0.7f * t)), mat_rotate_y(0.9f * t));
+    Mat4 models[kObjects];
+    for (int o = 0; o < kObjects; ++o) models[o] = mat_identity();
+    models[0] = links;
+    models[1] = mat_mul(links, mat_mul(mat_translate(0.62f, 0.0f, 0.0f), mat_rotate_x(1.5707963f)));
+    const float orbit = 1.3f * t;
+    models[2] = mat_mul(mat_translate(0.95f * cosf(orbit), 0.55f * sinf(orbit), 0.6f * sinf(orbit)),
+                        mat_mul(mat_rotate_z(0.4f * t), mat_rotate_y(2.0f * t)));
+    for (int m = 0; m < kMoons; ++m) {
+      const float a = 0.8f * t + m * 1.5707963f;
+      const Mat4 plane = mat_mul(mat_rotate_z(0.35f * m - 0.5f), mat_rotate_x(0.6f));
+      models[3 + m] = mat_mul(plane, mat_mul(mat_translate(1.15f * cosf(a), 0.0f, 1.15f * sinf(a)),
+                                             mat_rotate_y(3.0f * t + m)));
+    }
+    models[7] = mat_mul(mat_rotate_x(-0.7f), mat_mul(mat_translate(1.15f * cosf(-0.8f * t), 0.0f, 1.15f * sinf(-0.8f * t)),
+                                                     mat_mul(mat_rotate_y(-0.8f * t), mat_rotate_x(1.2f))));
+    for (int o = 0; o < kObjects; ++o) models[o] = mat_mul(view, models[o]);
     for (int o = 0; o < kObjects; ++o) {
       Mat4 mvp = mat_mul(projection, models[o]);
       quantize_matrix_transposed(mvp, g_mvp_q + o * 16, MODEL_VERTEX_INPUT2_SCALE, MODEL_VERTEX_INPUT2_ZERO_POINT,
