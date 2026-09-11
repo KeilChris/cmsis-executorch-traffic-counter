@@ -61,8 +61,10 @@
 #include "board_display.h"
 #endif
 #ifdef APP_HAS_SDS
+#include "SEGGER_RTT.h"
 #include "cmsis_os2.h"
 #include "sds.h"
+#include "sdsio_client_rtt_config.h"
 #endif
 
 #ifndef __ARM_FEATURE_MVE
@@ -157,7 +159,7 @@ alignas(32) uint8_t g_framebuffer[2][kFrameBytes] APP_FRAMEBUFFER_ATTRIBUTES;
 // there while the SDS thread drains them over RTT. The downscaled frame is
 // staged in the NPU temp pool, which is idle between NPU calls.
 #ifndef APP_SDS_RECORD_FRAMES
-#define APP_SDS_RECORD_FRAMES 300  // 6 s at the animation's 50 steps per second
+#define APP_SDS_RECORD_FRAMES 500  // 10 s at the animation's 50 steps per second
 #endif
 constexpr int kRecordDiv = 2;
 constexpr int kRecordWidth = kFrameWidth / kRecordDiv, kRecordHeight = kFrameHeight / kRecordDiv;
@@ -174,6 +176,19 @@ volatile bool g_sds_io_error = false;
 
 void sds_event(sdsId_t, uint32_t event) {  // from the SDS thread: the link to the server is gone
   if (event == SDS_EVENT_ERROR_IO) g_sds_io_error = true;
+}
+
+// Is an SDSIO-Server on the other end of the RTT channel? A connected server
+// sends a flags message every 100 ms, so bytes arrive on the down buffer
+// within a second. Probing matters because the SDS 3.1.0 client's
+// sdsioOpen never returns when nobody answers (its receive loop does not
+// exit on a timeout), which would hang the demo without a server.
+bool sds_server_present(uint32_t wait_ms) {
+  for (uint32_t t = 0; t < wait_ms; t += 50) {
+    if (SEGGER_RTT_HasData(SDSIO_RTT_CHANNEL)) return true;
+    osDelay(50);
+  }
+  return false;
 }
 
 void downscale_frame(const uint8_t* frame, uint8_t* out) {  // 2x2 box mean, RGB888 -> RGB888
@@ -891,6 +906,7 @@ extern "C" void arm_ethos_io_memcpy(void* dst, const void* src, size_t size) {
 }
 
 extern "C" int app_main(void) {
+  setvbuf(stdout, nullptr, _IONBF, 0);  // the C library buffers stdout in 128-byte chunks otherwise: lines arrive late, or never on a hang
   executorch::runtime::runtime_init();
   cycle_counter_init();
 
@@ -991,7 +1007,7 @@ extern "C" int app_main(void) {
   int record_frames = 0;
   if (display_on) {
     sdsInit(sds_event);
-    rec_frames = sdsOpen("NpuRender", sdsModeWrite, g_framebuffer[1], kFrameBytes);
+    if (sds_server_present(1500)) rec_frames = sdsOpen("NpuRender", sdsModeWrite, g_framebuffer[1], kFrameBytes);
     if (rec_frames != nullptr) rec_timing = sdsOpen("Timing", sdsModeWrite, g_timing_buffer, sizeof(g_timing_buffer));
     if (rec_frames == nullptr || rec_timing == nullptr) {
       printf("  SDS: no SDSIO-Server on the RTT channel, not recording\n");
@@ -1113,6 +1129,7 @@ extern "C" int app_main(void) {
 #ifdef APP_HAS_SDS
     if (record_frames > 0) {
       t0 = cycles();
+      sdsExchange();  // consume the server's flags messages, report ours; the down buffer fills otherwise
       downscale_frame(frame_rgb, g_temp_pool);
       int32_t written;
       do {
@@ -1148,9 +1165,14 @@ extern "C" int app_main(void) {
                                 us(t_record), us(t_total)};
       sdsWrite(rec_timing, frame * kRecordPeriodMs, &timing, sizeof(timing));
       if (--record_frames == 0) {
-        sdsClose(rec_timing);  // flushes; frame buffer 1 returns to the display next frame
-        sdsClose(rec_frames);
-        printf("  SDS: recording closed after frame %d\n", frame);
+        if (g_sds_io_error) {
+          // sdsClose waits for the server's answer, forever on a dead link.
+          printf("  SDS: streams left open after the link error (frame %d)\n", frame);
+        } else {
+          sdsClose(rec_timing);  // flushes; frame buffer 1 returns to the display next frame
+          sdsClose(rec_frames);
+          printf("  SDS: recording closed after frame %d\n", frame);
+        }
       }
     }
 #endif

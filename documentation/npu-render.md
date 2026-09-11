@@ -183,28 +183,36 @@ files are in `board/DevKit-E8/RTE/{CMSIS,SDS,SEGGER}`: a 16 kB RTT up
 buffer, 2 kB down, 16 kB RTX dynamic memory, 4 streams.
 
 How the runner records (`src/app_main.cpp`, `APP_HAS_SDS`): at start it
-calls `sdsInit` and `sdsOpen`; if no SDSIO-Server answers within 5 s it
-prints "not recording" and runs the demo as before. Otherwise it records the
-first `APP_SDS_RECORD_FRAMES` frames (300, 6 s of video). No memory is
-free for a frame-sized stream buffer, so while recording the display is
-single-buffered on frame buffer 0 and frame buffer 1 (1.15 MB) is the SDS
-stream buffer: up to three frames queue there and the SDS thread drains
-them over RTT while the next frame renders; when it is full the runner
-waits (`SDS_NO_SPACE`, `osDelay`). The 2x2 downscale is staged in the NPU
-temp pool, idle between NPU calls. After the last frame both streams are
-closed (flushed) and the display goes back to double buffering. The RTT
-throughput sets the recording rate, not the renderer.
+calls `sdsInit`, then watches the RTT down buffer for 1.5 s: a connected
+SDSIO-Server sends a flags message every 100 ms, so bytes arrive if one is
+there. Without a server it prints "not recording" and runs the demo as
+before (the probe is needed because the SDS 3.1.0 client's `sdsioOpen`
+never returns when nobody answers: its receive loop does not exit on a
+timeout). With a server it records the first `APP_SDS_RECORD_FRAMES`
+frames (500, 10 s of video). No memory is free for a frame-sized stream
+buffer, so while recording the display is single-buffered on frame buffer
+0 and frame buffer 1 (1.15 MB) is the SDS stream buffer: up to three
+frames queue there and the SDS thread drains them over RTT while the next
+frame renders; when it is full the runner waits (`SDS_NO_SPACE`,
+`osDelay`). Every recorded frame also calls `sdsExchange`, which consumes
+the server's flags messages (the 2 kB down buffer fills in seconds
+otherwise and the bridge stalls) and reports the runner's status. The 2x2
+downscale is staged in the NPU temp pool, idle between NPU calls. After
+the last frame both streams are closed (flushed) and the display goes back
+to double buffering; after a link error they are left open, since
+`sdsClose` would wait forever on a dead link. The RTT throughput sets the
+recording rate, not the renderer.
 
 Host side, in this order (the runner's `sdsOpen` gives the server 5 s):
 
 ```bash
 # 1. Halt the board at its reset vector (J-Link attaches reliably only then)
 pyocd commander --cbuild-run out/cmsis-executorch+DevKit-E8.cbuild-run.yml -c "reset halt"
-# 2. RTT bridge: J-Link DLL via pylink, TCP on 19021; resumes the CPU when the server connects
+# 2. RTT bridge: J-Link DLL via pylink, TCP on 5050; resumes the CPU when the server connects
 .venv/bin/python tools/sdsio_rtt_bridge.py --device AE822FA0E5597LS0_M55_HP \
     --rtt-addr $(grep -o "0x[0-9a-f]* *0x000000a8 *Zero *RW.*_SEGGER_RTT" out/cmsis-executorch/DevKit-E8/Debug/cmsis-executorch.axf.map | cut -d' ' -f1)
 # 3. SDSIO-Server in connect mode, files land in recordings/
-.venv/bin/python ~/.cache/arm/packs/ARM/SDS/3.1.0/utilities/sdsio-server.py socket --port 19021 --connect --workdir recordings
+.venv/bin/python ~/.cache/arm/packs/ARM/SDS/3.1.0/utilities/sdsio-server.py socket --port 5050 --connect --workdir recordings
 # 4. When the console says "SDS: recording closed", convert
 .venv/bin/python ~/.cache/arm/packs/ARM/SDS/3.1.0/utilities/sds-convert.py video \
     -i recordings/NpuRender.0.sds -o recordings/npu-render -y recordings/NpuRender.sds.yml
@@ -214,6 +222,13 @@ The `_SEGGER_RTT` address comes from the linker map because the J-Link's
 RAM search does not cover the M55_HP DTCM. The utilities need
 `pyserial opencv-python pyyaml pandas ifaddr libusb1 pylink-square` in the
 venv (`uv pip install --python .venv/bin/python ...`).
+
+Measured: the bridge moves 145 kB/s through the J-Link OB, so a 288 kB
+frame takes 2 s and the 500-frame recording 17 minutes; the renderer's
+own stages are unchanged meanwhile (vertex 0.36 ms, raster 18 to 40 ms,
+shade 24.8 ms per frame, from the Timing stream). `sds-convert video`
+writes an OpenCV `mp4v` file; `ffmpeg -c:v libx264 -pix_fmt yuv420p`
+re-encodes it for players that need H.264.
 
 Why the bridge instead of J-Link Commander's RTT telnet server: with
 JLinkExe attached and SDSIO-Server on `--connect '$$SEGGER_TELNET_ConfigStr=RTTCh;1$$'`
@@ -235,6 +250,20 @@ Pitfalls seen on the way:
   domain altogether (J-Link: SW-DP found, "Failed to power up DAP"; pyOCD:
   "Not supported by current CPU + target interface combination") and the
   console went silent: only a power cycle of the board recovers that.
+
+Open issue (2026-09-11): after several minutes the DTCM shows sparse
+corruption, a 16-bit word holding the low half of its own address every
+1664 bytes, marching through the vertex input tensors among others. In the
+10 s recording it appears after about 4 s as streaks (vertices flung
+across the frame) and once ended a run with `vertex method failed
+(err=18)`. Single-word reads through pyOCD and J-Link confirm the memory
+content; MRAM reads back bit-exact, so it is not a read artefact. An 8 min
+run of the same build with no debugger attached and no server showed the
+pattern only in the heap and the unused DTCM gap, at the same addresses as
+before the power cycle, so those may be fossils; the vertex tensors stayed
+clean in that run. The writer is still unidentified; a data watchpoint at
+the next predicted address (`pyocd commander -c "watch ADDR w 2"`) is the
+next step.
 
 ## Running it
 
