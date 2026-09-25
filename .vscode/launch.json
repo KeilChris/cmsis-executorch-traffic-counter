@@ -56,10 +56,9 @@
             "type": "gdbtarget",
             "request": "launch",
             "cwd": "${workspaceFolder}/",
-            "program": "out/cmsis-executorch/DevKit-E8/Debug/cmsis-executorch.axf",
+            "program": "out/yolo/AppKit-E8/Release/yolo.axf",
             "gdb": "arm-none-eabi-gdb",
             "auxiliaryGdb": true,
-            "preLaunchTask": "CMSIS Load",
             "initCommands": [
                 "monitor reset 0",
                 "tbreak main",
@@ -76,7 +75,7 @@
                 "server": "JLinkGDBServerCL",
                 "serverParameters": [
                     "-device",
-                    "AE822FA0E5597LS0_M55_HP",
+                    "AE822FA0E5597BS0_M55_HP",
                     "-endian",
                     "little",
                     "-if",
@@ -99,33 +98,8 @@
             "cmsis": {
                 "cbuildRunFile": "${command:cmsis-csolution.getCbuildRunFile}",
                 "updateConfiguration": "auto"
-            }
-        },
-        {
-            "name": "M55_HP JLink (attach)",
-            "type": "gdbtarget",
-            "request": "attach",
-            "cwd": "${workspaceFolder}/",
-            "program": "out/cmsis-executorch/DevKit-E8/Debug/cmsis-executorch.axf",
-            "gdb": "arm-none-eabi-gdb",
-            "auxiliaryGdb": true,
-            "initCommands": [
-                ""
-            ],
-            "customResetCommands": [
-                "monitor reset 0",
-                "maintenance flush register-cache",
-                "maintenance flush dcache",
-                "tbreak main",
-                "continue"
-            ],
-            "target": {
-                "port": "3333"
             },
-            "cmsis": {
-                "cbuildRunFile": "${command:cmsis-csolution.getCbuildRunFile}",
-                "updateConfiguration": "auto"
-            }
+            "preLaunchTask": "CMSIS Load"
         },
         {
             "name": "M55_HE JLink (launch)",
@@ -149,7 +123,7 @@
                 "server": "JLinkGDBServerCL",
                 "serverParameters": [
                     "-device",
-                    "AE822FA0E5597LS0_M55_HE",
+                    "AE822FA0E5597BS0_M55_HE",
                     "-endian",
                     "little",
                     "-if",
@@ -168,6 +142,32 @@
                     "4445"
                 ],
                 "port": "3334"
+            },
+            "cmsis": {
+                "cbuildRunFile": "${command:cmsis-csolution.getCbuildRunFile}",
+                "updateConfiguration": "auto"
+            }
+        },
+        {
+            "name": "M55_HP JLink (attach)",
+            "type": "gdbtarget",
+            "request": "attach",
+            "cwd": "${workspaceFolder}/",
+            "program": "out/yolo/AppKit-E8/Release/yolo.axf",
+            "gdb": "arm-none-eabi-gdb",
+            "auxiliaryGdb": true,
+            "initCommands": [
+                ""
+            ],
+            "customResetCommands": [
+                "monitor reset 0",
+                "maintenance flush register-cache",
+                "maintenance flush dcache",
+                "tbreak main",
+                "continue"
+            ],
+            "target": {
+                "port": "3333"
             },
             "cmsis": {
                 "cbuildRunFile": "${command:cmsis-csolution.getCbuildRunFile}",

@@ -103,13 +103,13 @@
 // <o> CPI number of active framebuffers
 // <i> Defines CPI number of active framebuffers
 // <i> Default: 2
-#define RTE_CPI_NUM_ACTIVE_FRAMEBUFFERS                       0
+#define RTE_CPI_NUM_ACTIVE_FRAMEBUFFERS                       4
 
 // <o> Enable CPI streaming
 // <0=> Disable
 // <1=> Enable
 // <i> Default: 1
-#define RTE_CPI_STREAMING_ENABLE                              0
+#define RTE_CPI_STREAMING_ENABLE                              1
 
 // <e> MT9M114 [Driver_MT9M114]
 // <o> Enable/Disable MT9M114 camera sensor
@@ -998,7 +998,7 @@
 //     <4=>   320x240_RGB565
 //     <5=>   320x320_RGB565
 // <i> Default: 1
-#define RTE_MT9M114_CAMERA_SENSOR_MIPI_IMAGE_CONFIG            1
+#define RTE_MT9M114_CAMERA_SENSOR_MIPI_IMAGE_CONFIG            3
 
 // <o> select MT9M114 MIPI number of lanes in DPHY
 // <i> defines select MT9M114 MIPI number of lanes in DPHY.

@@ -31,6 +31,11 @@ uint32_t display_frame_count(void);
    with a timeout of a few frames; returns 0 when it did, -1 on timeout. */
 int32_t display_wait_frame(uint32_t count);
 
+/* Block until the controller scans out `fb` (the buffer of the last
+   display_present()): the buffer shown before it is free from then on.
+   0, or -1 on a timeout of a few frames. */
+int32_t display_wait_shown(const void *fb);
+
 #ifdef __cplusplus
 }
 #endif

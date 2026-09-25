@@ -20,7 +20,7 @@ solution:
     # Pinned exactly: the pack's C++ runtime and the Python exporter pinned in
     # requirements.txt must be the same ExecuTorch version, or the .pte fails
     # to load. `cbuild setup --packs` fetches it from the public index.
-    - pack: PyTorch::ExecuTorch@1.4.1
+    - pack: PyTorch::ExecuTorch@1.5.1
     - pack: ARM::CMSIS
     - pack: ARM::CMSIS-NN
     - pack: ARM::CMSIS-Compiler
@@ -39,6 +39,7 @@ solution:
       device: SSE-320-FVP
       variables:
         - Board-Layer: $SolutionDir()$/board/Corstone-320/Board-U85.clayer.yml
+        - Quake-Board-Layer: $SolutionDir()$/board/Corstone-320/Board-U85.clayer.yml
         - AI-Layer: $SolutionDir()$/ai_layer/ai_layer.clayer.yml
       target-set:
         - set:
@@ -55,6 +56,17 @@ solution:
             model: ${workspaceFolder}/.vscode/fvp.sh
             config-file: board/Corstone-320/fvp_config.txt
             args: "--simlimit 60"
+        # Quake, headless (quake/quake.cproject.yml): the model preloads the
+        # pak image into DDR, where platform/port_fvp.c expects it.
+        - set: quake
+          images:
+            - project-context: quake.Debug
+          debugger:
+            name: Arm-FVP
+            model: ${workspaceFolder}/.vscode/fvp.sh
+            config-file: board/Corstone-320/fvp_config.txt
+            args: "--simlimit 600 --data
+              mps4_board.subsystem.cpu0=quake/data/id1/pak0.pak@0x90000000"
 
     # Alif Ensemble E8 DevKit: Cortex-M55 high-performance core with the
     # Ethos-U85 NPU, on real hardware through the on-board J-Link (SWD).
@@ -65,11 +77,18 @@ solution:
       device: Alif Semiconductor::AE822FA0E5597LS0:M55_HP
       variables:
         - Board-Layer: $SolutionDir()$/board/DevKit-E8/Board-U85.clayer.yml
+        # The board layer of the Quake project: adds the HyperRAM and the OSPI
+        # flash in XIP mode and has a scatter file of its own.
+        - Quake-Board-Layer: $SolutionDir()$/board/DevKit-E8/Board-Quake.clayer.yml
+        # The cat detector (yolo/yolo.cproject.yml): no SDS, the console in a
+        # log buffer the debugger reads, the MRAM code region enlarged for the
+        # 2.3 MB YOLO26n program.
+        - Yolo-Board-Layer: $SolutionDir()$/board/DevKit-E8/Board-Yolo.clayer.yml
         - AI-Layer: $SolutionDir()$/ai_layer/ai_layer.clayer.yml
       target-set:
         - set:
           images:
-            - project-context: cmsis-executorch.Debug
+            - project-context: quake.Debug
           debugger:
             name: J-Link Server
             # SWD at 4 MHz is the pack's <debugProbe> setting for DevKit-E8.
@@ -80,6 +99,87 @@ solution:
             protocol: swd
             clock: 4000000
             start-pname: M55_HP
+        # Quake (quake/quake.cproject.yml); the pak image is programmed into
+        # the OSPI flash separately, see documentation/npu-quake.md.
+        - set: quake
+          images:
+            - project-context: quake.Debug
+          debugger:
+            name: J-Link Server
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HP
+        # The YOLO26n cat detector (yolo/yolo.cproject.yml), see
+        # documentation/yolo-cats.md.
+        - set: yolo
+          images:
+            - project-context: yolo.Release
+          debugger:
+            name: J-Link Server
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HP
+
+    # Alif Ensemble E8 AppKit (AppKit-E8-AIML): the same SoC in another package,
+    # the same 480x800 panel, a 64 MB APS512XXN PSRAM in place of the HyperRAM.
+    # The board layers in board/AppKit-E8 reuse the DevKit-E8's board files.
+    - type: AppKit-E8
+      board: Alif Semiconductor::AppKit-E8-AIML
+      device: Alif Semiconductor::AE822FA0E5597BS0:M55_HP
+      variables:
+        - Board-Layer: $SolutionDir()$/board/AppKit-E8/Board-U85.clayer.yml
+        - Quake-Board-Layer: $SolutionDir()$/board/AppKit-E8/Board-Quake.clayer.yml
+        - Yolo-Board-Layer: $SolutionDir()$/board/AppKit-E8/Board-Yolo.clayer.yml
+        - AI-Layer: $SolutionDir()$/ai_layer/ai_layer.clayer.yml
+      target-set:
+        - set:
+          images:
+            - project-context: cmsis-executorch.Debug
+          debugger:
+            name: J-Link Server
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HP
+        - set: quake
+          images:
+            - project-context: quake.Release
+          debugger:
+            name: J-Link Server
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HP
+        # The YOLO26n cat detector (yolo/yolo.cproject.yml), see
+        # documentation/yolo-cats.md.
+        - set: yolo
+          images:
+            - project-context: yolo.Release
+          debugger:
+            name: J-Link Server
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HP
+
+    # The same board, the other Cortex-M55: the high-efficiency core (160 MHz,
+    # 256 kB TCMs) with the Ethos-U55 (128 MACs) that is local to it. Quake only;
+    # its AI layer is ai_layer_u55/ (what the Ethos-U55 runs whole: nearest
+    # upscale, no bloom). The Secure Enclave has to boot this core from its MRAM
+    # region: .alif/M55_HE_mram_cfg.json, see documentation/npu-quake.md.
+    - type: AppKit-E8-HE
+      board: Alif Semiconductor::AppKit-E8-AIML
+      device: Alif Semiconductor::AE822FA0E5597BS0:M55_HE
+      variables:
+        - Board-Layer: $SolutionDir()$/board/AppKit-E8-HE/Board-Quake.clayer.yml
+        - Quake-Board-Layer: $SolutionDir()$/board/AppKit-E8-HE/Board-Quake.clayer.yml
+        - AI-Layer: $SolutionDir()$/ai_layer_u55/ai_layer.clayer.yml
+      target-set:
+        - set:
+          images:
+            - project-context: quake.Release
+          debugger:
+            name: J-Link Server
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HE
 
   misc:
     # CMSIS-Toolbox 2.14.1 passes -mfpu=fpv5-sp-d16 to Clang for the Cortex-M85
@@ -96,16 +196,28 @@ solution:
     - type: Debug
       debug: on
       optimize: debug
+    # Everything at full optimization, the packs' sources included (ExecuTorch
+    # runtime, Ethos-U driver, RTX, Alif drivers are -O1 in Debug). Debug
+    # information stays on: it costs nothing on the target.
+    - type: Release
+      debug: on
+      optimize: speed
 
   projects:
     - project: ./cmsis-executorch.cproject.yml
+    # Quake on the same pipeline; its source is fetched by quake/fetch_quake.py.
+    - project: ./quake/quake.cproject.yml
+    # The YOLO26n cat detector, on the Alif boards.
+    - project: ./yolo/yolo.cproject.yml
+      for-context: [+DevKit-E8, +AppKit-E8]
 
   # MLOps information: exported to cmsis-executorch.cbuild-mlops.yml by
   # `cbuild setup ... --active SSE-320-U85`. Retarget the NPU here and
   # create_ai_layer.py picks it up on its next run.
   # https://open-cmsis-pack.github.io/cmsis-toolbox/build-overview/#mlops-information
   mlops:
-    description: NPU render, the tensor stages of a 3D pipeline (vertex transform, deferred shading) for Ethos-U85
+    description: NPU render, the tensor stages of a 3D pipeline (vertex transform,
+      deferred shading) for Ethos-U85
     npu:
       type: Ethos-U85 # explicit: the Ensemble pack lists an Ethos-U55 first
     vela:

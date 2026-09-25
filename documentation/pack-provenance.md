@@ -11,14 +11,14 @@ The pack is published as an asset of the matching ExecuTorch GitHub release,
 which is also what its `.pdsc` declares as its download location:
 
 ```xml
-<url>https://github.com/pytorch/executorch/releases/download/v1.4.1/</url>
+<url>https://github.com/pytorch/executorch/releases/download/v1.5.1/</url>
 ```
 
 So the normal acquisition routes work, and `cbuild setup ... --packs` takes
 care of it on a fresh clone. To install it by hand:
 
 ```bash
-cpackget add PyTorch::ExecuTorch@1.4.1
+cpackget add PyTorch::ExecuTorch@1.5.1
 ```
 
 The version is pinned exactly, in `cmsis-executorch.csolution.yml` and
@@ -26,10 +26,10 @@ The version is pinned exactly, in `cmsis-executorch.csolution.yml` and
 
 ```yaml
 packs:
-  - pack: PyTorch::ExecuTorch@1.4.1
+  - pack: PyTorch::ExecuTorch@1.5.1
 ```
 
-Both must agree. The pin is exact rather than a `@^1.4.1` range because the
+Both must agree. The pin is exact rather than a `@^1.5.1` range because the
 pack's C++ runtime and the Python exporter have to be the *same* ExecuTorch
 version — see [Moving to a new ExecuTorch version](#moving-to-a-new-executorch-version).
 
@@ -63,7 +63,7 @@ ExecuTorch tree at `backends/arm/cmsis_pack/scripts/build_pack.sh`.
 ```bash
 git clone https://github.com/pytorch/executorch.git
 cd executorch
-git checkout release/1.4          # or the tag matching your target version
+git checkout release/1.5          # or the tag matching your target version
 git submodule update --init --recursive
 ```
 

@@ -116,9 +116,13 @@
 // <h> Stack / Heap Configuration
 //   <i> Pack defaults: 0x600 stack, 0xC00 heap. The runner's EmbeddedModule
 //   <i> keeps its method table and planned buffers on the heap.
+//   <i> app_main runs on the main stack here (no RTOS): the NPU render demo's
+//   <i> frame alone is 5.3 kB (the DevKit-E8 layer gives its app thread 32 kB),
+//   <i> and Quake's render path keeps about 240 kB of edge, surface and span
+//   <i> lists on the stack. The DDR4 has room for both.
 //   <o0> Stack Size (in Bytes) <0x0-0xFFFFFFFF:8>
 //   <o1> Heap Size (in Bytes) <0x0-0xFFFFFFFF:8>
-#define __STACK_SIZE  0x00001000
+#define __STACK_SIZE  0x00080000
 #define __HEAP_SIZE   0x00018000
 // </h>
 

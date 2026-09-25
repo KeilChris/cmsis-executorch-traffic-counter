@@ -42,6 +42,7 @@ there.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass, field
 
 import torch
@@ -222,7 +223,23 @@ def _shade_samples() -> list[tuple[torch.Tensor, ...]]:
 
 def get_methods() -> list[MethodSpec]:
     torch.manual_seed(0)
+    # The Quake project's stages (quake.py) share this module's MethodSpec and
+    # filter helpers and ride in the same .pte.
+    from quake import get_quake_methods, get_quake_u55_methods
+
+    # MODEL_FLAVOR selects what goes into the .pte. The Ethos-U55 build
+    # (ai_layer_u55/) takes the Quake methods only, in the form that NPU runs
+    # whole: the int16 matmul of `vertex` and the filters of `shade` are
+    # Ethos-U85 material.
+    if os.environ.get("MODEL_FLAVOR") == "quake-u55":
+        return get_quake_u55_methods()
+    # The cat detector (ai_layer_yolo/): YOLO26n alone, it fills the MRAM.
+    if os.environ.get("MODEL_FLAVOR") == "yolo":
+        from yolo import get_yolo_methods
+
+        return get_yolo_methods()
     return [
         MethodSpec("vertex", VertexStage().eval(), _vertex_samples(), activation_bits=16),
         MethodSpec("shade", ShadeStage().eval(), _shade_samples(), activation_bits=8),
+        *get_quake_methods(),
     ]

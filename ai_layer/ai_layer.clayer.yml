@@ -6,7 +6,7 @@ layer:
   description: NPU render, the tensor stages of a 3D pipeline (vertex transform, deferred shading) for Ethos-U85
 
   packs:
-    - pack: PyTorch::ExecuTorch@1.4.1
+    - pack: PyTorch::ExecuTorch@1.5.1
 
   define:
     - ET_LOG_ENABLED: 0

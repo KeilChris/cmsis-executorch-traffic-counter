@@ -90,3 +90,16 @@ fvp_stdout.log
 recordings/*.sds
 recordings/*.index.txt
 recordings/*.mp4
+
+# The Quake source (GPL) is fetched by quake/fetch_quake.py, never committed;
+# neither is the game data.
+quake/upstream/
+quake/data/
+*.pak
+
+# The cat detector: the test image is generated from a photo that is not ours
+# to redistribute (yolo/make_test_image.py), and model/yolo.py caches the
+# YOLO26n weights and the COCO128 calibration images next to itself.
+yolo/test_image.c
+yolo/test_image.h
+model/.cache/

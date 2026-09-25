@@ -77,7 +77,7 @@ static void app_thread(void *argument)
 int main(void)
 {
     /* Apply the Conductor pin configuration (includes the UART4 console pins) */
-    board_pins_config();
+      board_pins_config();
 
     /* Apply the Conductor GPIO configuration */
     board_gpios_config();

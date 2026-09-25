@@ -83,6 +83,12 @@ def executorch_version(mlops_file: Path) -> str:
     import yaml
 
     pack_file = mlops_file.with_name(mlops_file.name.replace(".cbuild-mlops.yml", ".cbuild-pack.yml"))
+    # After a version bump the lock file still lists the old pin as resolved
+    # by its own selector: the csolution's pin decides (the lock file may be a
+    # link into the solution directory, see ai_layer_u55/).
+    for csolution in pack_file.resolve().parent.glob("*.csolution.yml"):
+        if pinned := re.search(rf"{re.escape(PACK)}@(\d+\.\d+\.\d+\S*)", csolution.read_text()):
+            return pinned.group(1)
     fallback = None
     for entry in yaml.safe_load(pack_file.read_text())["cbuild-pack"]["resolved-packs"]:
         name, _, version = entry["resolved-pack"].partition("@")
@@ -178,6 +184,12 @@ def export_program(spec) -> tuple[bytes, dict]:
         program = edge.exported_program(method.name)
         inputs, outputs = [], []
         for index, example in enumerate(method.example):
+            if not example.is_floating_point():
+                # An integer input (the indices of a gather) is not quantized:
+                # it goes to the delegate as it is. Scale 1, zero point 0.
+                info = torch.iinfo(example.dtype)
+                inputs.append(_tensor_desc(tuple(example.shape), example.dtype, 1.0, 0, info.min, info.max))
+                continue
             scale, zp, qmin, qmax, dtype = quantize_input(program, index)
             inputs.append(_tensor_desc(tuple(example.shape), dtype, scale, zp, qmin, qmax))
         for index in range(len(program.graph_signature.user_outputs)):

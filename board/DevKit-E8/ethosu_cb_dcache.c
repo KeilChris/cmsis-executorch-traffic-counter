@@ -17,6 +17,7 @@
  *---------------------------------------------------------------------------*/
 
 #include "RTE_Components.h"
+#include <stdbool.h>
 #include CMSIS_device_header
 
 #include "ethosu_driver.h"
@@ -83,8 +84,20 @@ void ethosu_flush_dcache(const uint64_t *base_addr, const size_t *base_addr_size
     __DSB();
 }
 
+/* Set by an application whose CPU side never reads what the NPU writes (the
+   panel scans the NPU's output out of the scratch): the invalidate after a job
+   then only throws the working set of whatever else runs out of the data cache.
+   Lines the CPU wrote into the scratch before (the inputs) are written back by
+   the clean before the next job, whole lines at a time, so a stale copy of
+   them in the cache does no harm. */
+volatile bool ethosu_dcache_keep;
+
 void ethosu_invalidate_dcache(const uint64_t *base_addr, const size_t *base_addr_size, int num_base_addr)
 {
+    if (ethosu_dcache_keep) {
+        __DSB();
+        return;
+    }
     for (int i = 0; i < num_base_addr; i++) {
         if (check_mem_region((const void *)(uintptr_t)base_addr[i], base_addr_size[i])) {
             /* Call CleanInvalidateDCache instead of SCB_InvalidateDCache to avoid silently losing data. */
