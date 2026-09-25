@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # Copyright 2026 Arm Limited and/or its affiliates.
 # SPDX-License-Identifier: Apache-2.0
-"""Program an HP-core image into the MRAM of an Alif E8 board through the Secure Enclave (SETOOLS).
+"""Program an HP-core image into the MRAM of an Alif E8 or E7 board through the Secure Enclave (SETOOLS).
 
     python tools/setools_mram.py out/yolo/AppKit-E8/Release/yolo.hex [--part BS0] [--setools /Applications/Alif]
+    python tools/setools_mram.py out/traffic/AppKit-E7/Release/traffic.hex --part E7
 
 The image becomes the HP_APP of the boot table (.alif/M55_HP_mram_cfg.json with
 the stub replaced by the image): the Secure Enclave starts the HP core on it
@@ -26,6 +27,7 @@ HERE = Path(__file__).resolve().parent.parent
 PARTS = {
     "BS0": "E8 (AE822FA0E5597BS0) - 5.5 MRAM / 9.75 SRAM",  # AppKit-E8
     "LS0": "E8 (AE822FA0E5597LS0) - 5.5 MRAM / 9.75 SRAM",  # DevKit-E8
+    "E7": "E7 (AE722F80F55D5LS) - 5.5 MRAM / 13.5 SRAM",    # AppKit-E7
 }
 
 
@@ -50,7 +52,7 @@ def hex_to_bin(hex_file: Path) -> tuple[int, bytes]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("hex", type=Path)
-    ap.add_argument("--part", choices=sorted(PARTS), default="BS0", help="BS0: AppKit-E8 (default), LS0: DevKit-E8")
+    ap.add_argument("--part", choices=sorted(PARTS), default="BS0", help="BS0: AppKit-E8 (default), LS0: DevKit-E8, E7: AppKit-E7")
     ap.add_argument("--setools", type=Path, default=Path("/Applications/Alif"), help="SETOOLS root (alif.setools.root)")
     args = ap.parse_args()
 

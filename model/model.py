@@ -238,6 +238,11 @@ def get_methods() -> list[MethodSpec]:
         from yolo import get_yolo_methods
 
         return get_yolo_methods()
+    # The traffic counter (ai_layer_traffic/): YOLO26n with the vehicle classes, for the Ethos-U55.
+    if os.environ.get("MODEL_FLAVOR") == "traffic":
+        from traffic import get_traffic_methods
+
+        return get_traffic_methods()
     return [
         MethodSpec("vertex", VertexStage().eval(), _vertex_samples(), activation_bits=16),
         MethodSpec("shade", ShadeStage().eval(), _shade_samples(), activation_bits=8),

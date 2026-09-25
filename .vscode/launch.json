@@ -102,6 +102,56 @@
             "preLaunchTask": "CMSIS Load"
         },
         {
+            "name": "M55_HP JLink AppKit-E7 traffic (launch)",
+            "type": "gdbtarget",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/",
+            "program": "out/traffic/AppKit-E7/Release/traffic.axf",
+            "gdb": "arm-none-eabi-gdb",
+            "auxiliaryGdb": true,
+            "initCommands": [
+                "monitor reset 0",
+                "tbreak main",
+                ""
+            ],
+            "customResetCommands": [
+                "monitor reset 0",
+                "maintenance flush register-cache",
+                "maintenance flush dcache",
+                "tbreak main",
+                "continue"
+            ],
+            "target": {
+                "server": "JLinkGDBServerCL",
+                "serverParameters": [
+                    "-device",
+                    "AE722F80F55D5LS_M55_HP",
+                    "-endian",
+                    "little",
+                    "-if",
+                    "swd",
+                    "-speed",
+                    "4000",
+                    "-halt",
+                    "-noir",
+                    "-vd",
+                    "-nogui",
+                    "-localhostonly",
+                    "-silent",
+                    "-port",
+                    "3333",
+                    "-TelnetPort",
+                    "4444"
+                ],
+                "port": "3333"
+            },
+            "cmsis": {
+                "cbuildRunFile": "${command:cmsis-csolution.getCbuildRunFile}",
+                "updateConfiguration": "auto"
+            },
+            "preLaunchTask": "CMSIS Load"
+        },
+        {
             "name": "M55_HE JLink (launch)",
             "type": "gdbtarget",
             "request": "launch",

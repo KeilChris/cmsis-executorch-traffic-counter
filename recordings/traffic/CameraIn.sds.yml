@@ -1,0 +1,14 @@
+sds:
+  name: CameraIn
+  description: >-
+    Model input of the traffic counter, one frame per record: the ARX3A0's
+    560x560 RAW8 Bayer frame demosaiced, white-balanced and scaled to 416x416,
+    RGB888. Recorded from the camera on the AppKit-E7; played back as the
+    detector's input instead of the camera.
+  tick-frequency: 1000
+  content:
+    - image:
+        pixel_format: RGB888
+        width: 416
+        height: 416
+        stride_bytes: 1248

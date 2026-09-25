@@ -1,0 +1,160 @@
+# Copyright 2026 Arm Limited and/or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2) board bring-up for the traffic
+# counter (traffic/traffic.cproject.yml), on the Cortex-M55 high-performance
+# (HP) core with its Ethos-U55-256. Derived from the AppKit-E8's
+# Board-Yolo.clayer.yml: the same board files (../DevKit-E8), the display
+# (CDC200 -> MIPI DSI -> ILI9806E 480x800), the console in a log buffer that
+# the debugger reads (SW4 stays on SEUART for the Secure Enclave tools), SDS
+# over RTT, and a scatter file whose code region runs on into the MRAM user
+# region for the 2.4 MB YOLO26n program.
+#
+# What differs from the E8: the NPU is the HP core's Ethos-U55 (ETHOSU55, the
+# pack's NPU region settings: command stream and weights through the MRAM
+# port, the scratch through the SRAM port); the E7 has no ISP and its CPI has
+# no streaming mode, so the camera (the kit's ARX3A0, 560x560 RAW8 Bayer over
+# MIPI CSI-2) is captured into buffers the application swaps at each VSYNC and
+# demosaiced on the CPU (traffic/camera.c, traffic/image.c); SRAM1 (2.5 MB at
+# 0x08000000) is not contiguous with SRAM0 (4 MB), see linker_ac6_traffic.sct.src.
+#
+# The pack's own AppKit-E7 layer names the MT9M114 sensor; the Gen 2 kit ships
+# with the ARX3A0 module. For an MT9M114 replace the sensor component below
+# and set RTE_MT9M114_CAMERA_SENSOR_MIPI_IMAGE_CONFIG 3 (640x480 RGB565) in
+# RTE_Device.h: traffic/camera.h follows the component.
+layer:
+  type: Board
+  description: AppKit-E7 board setup for the traffic counter on M55_HP with the Ethos-U55
+  for-board: Alif Semiconductor::AppKit-E7-AIML
+  for-device: Alif Semiconductor::AE722F80F55D5LS:M55_HP
+  device: :M55_HP
+
+  processor:
+    trustzone: off
+
+  connections:
+    - connect: AppKit-E7 Board
+      provides:
+        - STDIN
+        - STDOUT
+        - STDERR
+        - Heap: 98304
+
+  define:
+    - CMSIS_target_header: \"DevKit-E8.h\"
+    - ETHOSU55
+    # The Ethos-U driver's NPU configuration of the pack's E7 layer: the
+    # command stream (QCONFIG) and region 0 (the weights, in the MRAM) over the
+    # NPU's AXI1 port, region 1 (Vela's scratch in the SRAM) over AXI0.
+    - NPU_QCONFIG: 1
+    - NPU_REGIONCFG_0: 1
+    - NPU_REGIONCFG_1: 0
+    - NPU_REGIONCFG_2: 1
+    - AXI_LIMIT0_MEM_TYPE: 3
+    - AXI_LIMIT1_MEM_TYPE: 3
+    - AXI_LIMIT2_MEM_TYPE: 3
+    - AXI_LIMIT3_MEM_TYPE: 3
+    # The pack's ILI9806E driver names the backlight pin BOARD_LCD_BL_LED_*, the
+    # AppKit's board_defs.h BOARD_LCD_BACKLIGHT_*.
+    - BOARD_LCD_BL_LED_GPIO_PORT: BOARD_LCD_BACKLIGHT_GPIO_PORT
+    - BOARD_LCD_BL_LED_GPIO_PIN: BOARD_LCD_BACKLIGHT_GPIO_PIN
+    # The application's ExecuTorch pools, the RTX thread stacks and the two
+    # frame buffers go into SRAM0 (4 MB, NPU-accessible, behind the D-cache).
+    - APP_POOL_SECTION: \".bss.ai_pool\"
+    - APP_HAS_DISPLAY: 1
+    - APP_FRAMEBUFFER_SECTION: \".bss.lcd_frame_buf\"
+    - APP_DISPLAY_WIDTH: 480
+    - APP_DISPLAY_HEIGHT: 800
+    - APP_THREAD_STACK_SIZE: 0x8000
+    # The camera: ARX3A0 over MIPI CSI-2 into the CPI, 560x560 RAW8 Bayer, two
+    # buffers the application swaps at each VSYNC (traffic/camera.c). The
+    # Bayer order and the mounting turn are set in traffic/camera.h.
+    - APP_HAS_CAMERA: 1
+    # SDS recording and playback over the J-Link's RTT channel 1.
+    - APP_HAS_SDS: 1
+
+  packs:
+    - pack: AlifSemiconductor::Ensemble@^2.2.0-0
+    - pack: ARM::CMSIS@^6.2.0
+    - pack: ARM::CMSIS-Compiler@^2.1.0
+    - pack: ARM::ethos-u-core-driver@^1.26.2
+    - pack: ARM::CMSIS-RTX@^5.9.1
+    - pack: ARM::SDS@^3.1.0
+    - pack: SEGGER::RTT@^8.58.0
+
+  misc:
+    - for-compiler: AC6
+      Link:
+        - '--diag_suppress 6312,6314,6329,6848'
+
+  components:
+    - component: Device:Startup
+
+    - component: BSP:Board Config
+    - component: BSP:AppKit Config&AppKit-E7-AIML
+
+    - component: CMSIS:CORE
+
+    - component: CMSIS Driver:USART
+    # The ILI9806E panel driver and the camera sensor drive their reset,
+    # backlight and power pins through the CMSIS GPIO driver.
+    - component: CMSIS Driver:GPIO
+      define:
+        - CMSIS_GPIO_DISABLE_EVENTS
+
+    # RTX5: app_main runs in an RTX thread (main.c); the SDS Stream component needs it too.
+    - component: CMSIS:RTOS2:Keil RTX5&Source
+    - component: CMSIS:OS Tick:SysTick
+    # SDS data streams over SEGGER RTT (the J-Link OB), read and written by SDSIO-Server.
+    - component: SDS:Stream&CMSIS-RTOS2
+    - component: SDS:IO:RTT
+    - component: SEGGER:RTT
+
+    - component: CMSIS-Compiler:CORE
+    - component: CMSIS-Compiler:STDERR:Custom
+    - component: CMSIS-Compiler:STDIN:Custom
+    - component: CMSIS-Compiler:STDOUT:Custom
+
+    - component: Device:SOC Peripherals:MHU
+    - component: Device:SOC Peripherals:PINCONF
+
+    # Display: CDC200 controller -> MIPI DSI -> ILI9806E panel (the pack's
+    # RTE_Device.h in this layer configures RGB888, 480x800, 60 fps).
+    - component: BSP:External peripherals:ILI9806E LCD panel
+    - component: Device:SOC Peripherals:CDC
+    - component: Device:SOC Peripherals:GPIO
+    - component: Device:SOC Peripherals:MIPI DSI
+    - component: Device:SOC Peripherals:MIPI DSI CSI2 DPHY
+
+    # Camera: ARX3A0 sensor (I2C1 for its registers) -> MIPI CSI-2 -> CPI -> SRAM1.
+    - component: BSP:External peripherals:CAMERA Sensor ARX3A0
+    - component: CMSIS Driver:I2C
+    - component: Device:SOC Peripherals:CPI
+    - component: Device:SOC Peripherals:MIPI CSI2
+
+    - component: Machine Learning:NPU Support:Ethos-U Driver&Generic U55
+
+    - component: Services:Secure Enclave:core&Source
+    - component: Services:Secure Enclave:Initialization Helper&Source
+
+  groups:
+    - group: Board
+      files:
+        - file: ../DevKit-E8/main.c
+        - file: ../DevKit-E8/main.h
+        - file: ../DevKit-E8/DevKit-E8.h
+        - file: ../DevKit-E8/ethos_setup.c
+        # The console is a log buffer in the DTCM (console_log) that the debugger reads.
+        - file: ../DevKit-E8/retarget_stdio_log.c
+        - file: ../DevKit-E8/board_display.c
+        - file: ../DevKit-E8/board_display.h
+
+    - group: Ethos Interface
+      files:
+        - file: ../DevKit-E8/ethosu_cb_dcache.c
+
+  # AC6 only: the MRAM layout of the traffic counter (linker_ac6_traffic.sct.src).
+  linker:
+    - regions: ./RTE/Device/AE722F80F55D5LS_M55_HP/app_mem_regions.h
+    - script: ./linker_ac6_traffic.sct.src
+      for-compiler: AC6

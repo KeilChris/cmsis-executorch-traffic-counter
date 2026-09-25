@@ -17,7 +17,8 @@ log    prints the console of an image built with board/DevKit-E8/
        through the J-Link while the core runs.
 
 SETOOLS is found through $ALIF_SETOOLS_ROOT, else the `alif.setools.root`
-setting of VS Code, else /Applications/Alif.
+setting of VS Code, else /Applications/Alif. $JLINK_DEVICE names another
+J-Link device (the AppKit-E7: AE722F80F55D5LS_M55_HP).
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 MRAM_APP_BASE = 0x80200000  # APP_MRAM_HP_BASE: where the SE boots the M55_HP from
-JLINK_DEVICE = "AE822FA0E5597LS0_M55_HP"
+JLINK_DEVICE = os.environ.get("JLINK_DEVICE", "AE822FA0E5597LS0_M55_HP")  # AppKit-E7: AE722F80F55D5LS_M55_HP
 
 
 def setools_root() -> Path:

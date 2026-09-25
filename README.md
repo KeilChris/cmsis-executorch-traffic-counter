@@ -177,5 +177,9 @@ target-set to `FVP_Corstone_SSE-320`.
   memory map and RTE configuration.
 - [documentation/mlops-flow.md](documentation/mlops-flow.md): the `mlops:`
   node and `*.cbuild-mlops.yml` in detail.
+- [documentation/traffic-counter.md](documentation/traffic-counter.md): the
+  traffic counter, YOLO26n on the Ethos-U55 of the AppKit-E7 with a tracker
+  and a counting line; a fork of the cat detector
+  ([documentation/yolo-cats.md](documentation/yolo-cats.md)).
 - [documentation/pack-provenance.md](documentation/pack-provenance.md): where
   the `PyTorch::ExecuTorch` pack comes from and how to move to a new version.

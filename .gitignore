@@ -102,4 +102,6 @@ quake/data/
 # YOLO26n weights and the COCO128 calibration images next to itself.
 yolo/test_image.c
 yolo/test_image.h
+traffic/test_image.c
+traffic/test_image.h
 model/.cache/
