@@ -52,6 +52,24 @@ static void dphy_power_init(void)
     VBAT->PWR_CTRL &= ~(VBAT_PWR_CTRL_TX_DPHY_ISO | VBAT_PWR_CTRL_RX_DPHY_ISO | VBAT_PWR_CTRL_DPHY_PLL_ISO);
 }
 
+#ifdef RTE_SDS_IO_CLIENT_USB
+#include "services_lib_api.h"
+#include "aipm.h"
+static void usb_power_init(void)
+{
+    uint32_t error_code = 0;
+    run_profile_t runp;
+    if (SERVICES_clocks_enable_clock(se_services_s_handle, CLKEN_CLK_20M, true, &error_code) != 0 || error_code != 0) {
+        return;
+    }
+    if (SERVICES_get_run_cfg(se_services_s_handle, &runp, &error_code) != 0) {
+        return;
+    }
+    runp.phy_pwr_gating |= USB_PHY_MASK;
+    SERVICES_set_run_cfg(se_services_s_handle, &runp, &error_code);
+}
+#endif
+
 #ifdef RTE_CMSIS_RTOS2
 #ifndef APP_THREAD_STACK_SIZE
 #define APP_THREAD_STACK_SIZE 0x8000
@@ -90,6 +108,12 @@ int main(void)
 
     /* Power up the MIPI DPHY before the display driver touches it */
     dphy_power_init();
+
+#ifdef RTE_SDS_IO_CLIENT_USB
+    /* The USB device (SDS over the User USB): its 20 MHz clock and the PHY's
+       power, through the Secure Enclave, as the pack's AppKit-E7 layer does. */
+    usb_power_init();
+#endif
 
     /* Initialize STDIO (UART4 on the PRG USB connector) */
     stdio_init();

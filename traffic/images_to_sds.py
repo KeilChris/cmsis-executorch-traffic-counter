@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Images to a CameraIn stream for playback into the traffic counter, and the check of what it found.
 
-    python traffic/images_to_sds.py make <out dir> <image> [<image> ...]   # -> <out dir>/CameraIn.0.sds
+    python traffic/images_to_sds.py make [--fill] <out dir> <image> [<image> ...]   # -> <out dir>/CameraIn.0.sds
     python traffic/images_to_sds.py check <out dir>                        # board vs host, per image
 
 make: every image letterboxed to the model input (416x416 RGB888, as
-model/traffic.py and traffic/make_test_image.py do it), one record per image, 100
-ms apart, plus the metadata files. Play it with
+model/traffic.py and traffic/make_test_image.py do it) or, with --fill, its
+central square cut out and scaled to fill the input (a wide video loses its
+sides but no rows to the bars); one record per image, 100 ms apart, plus the
+metadata files. Play it with
 `python traffic/sds_session.py play --workdir <out dir>`.
 
 check: reads CameraIn.0.sds and the board's Detections.0.p.sds, runs the
@@ -42,7 +44,19 @@ def records(path: Path):
         offset += size
 
 
-def make(out: Path, images: list[Path]) -> None:
+def fill(bgr, size: int):
+    """The central square of the image, scaled to size x size, as RGB."""
+    import cv2
+
+    h, w = bgr.shape[:2]
+    side = min(h, w)
+    y0, x0 = (h - side) // 2, (w - side) // 2
+    square = bgr[y0:y0 + side, x0:x0 + side]
+    interpolation = cv2.INTER_AREA if side > size else cv2.INTER_LINEAR
+    return cv2.cvtColor(cv2.resize(square, (size, size), interpolation=interpolation), cv2.COLOR_BGR2RGB)
+
+
+def make(out: Path, images: list[Path], fill_input: bool = False) -> None:
     import cv2
 
     from traffic import IMAGE_SIZE, letterbox
@@ -53,8 +67,11 @@ def make(out: Path, images: list[Path]) -> None:
             bgr = cv2.imread(str(path))
             if bgr is None:
                 sys.exit(f"{path}: not an image")
-            rgb, _, _ = letterbox(bgr, IMAGE_SIZE)
-            data = rgb.tobytes()
+            if fill_input:
+                rgb = fill(bgr, IMAGE_SIZE)
+            else:
+                rgb, _, _ = letterbox(bgr, IMAGE_SIZE)
+            data = np.ascontiguousarray(rgb).tobytes()
             f.write(struct.pack("<II", i * 100, len(data)))
             f.write(data)
     (out / "CameraIn.0.txt").write_text("\n".join(str(p) for p in images) + "\n")
@@ -89,10 +106,13 @@ def check(out: Path) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) >= 4 and sys.argv[1] == "make":
-        make(Path(sys.argv[2]), [Path(p) for p in sys.argv[3:]])
-    elif len(sys.argv) == 3 and sys.argv[1] == "check":
-        check(Path(sys.argv[2]))
+    args = sys.argv[1:]
+    fill_input = "--fill" in args
+    args = [a for a in args if a != "--fill"]
+    if len(args) >= 3 and args[0] == "make":
+        make(Path(args[1]), [Path(p) for p in args[2:]], fill_input)
+    elif len(args) == 2 and args[0] == "check":
+        check(Path(args[1]))
     else:
         sys.exit(__doc__)
 

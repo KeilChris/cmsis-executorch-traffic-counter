@@ -56,56 +56,6 @@
             "type": "gdbtarget",
             "request": "launch",
             "cwd": "${workspaceFolder}/",
-            "program": "out/yolo/AppKit-E8/Release/yolo.axf",
-            "gdb": "arm-none-eabi-gdb",
-            "auxiliaryGdb": true,
-            "initCommands": [
-                "monitor reset 0",
-                "tbreak main",
-                ""
-            ],
-            "customResetCommands": [
-                "monitor reset 0",
-                "maintenance flush register-cache",
-                "maintenance flush dcache",
-                "tbreak main",
-                "continue"
-            ],
-            "target": {
-                "server": "JLinkGDBServerCL",
-                "serverParameters": [
-                    "-device",
-                    "AE822FA0E5597BS0_M55_HP",
-                    "-endian",
-                    "little",
-                    "-if",
-                    "swd",
-                    "-speed",
-                    "4000",
-                    "-halt",
-                    "-noir",
-                    "-vd",
-                    "-nogui",
-                    "-localhostonly",
-                    "-silent",
-                    "-port",
-                    "3333",
-                    "-TelnetPort",
-                    "4444"
-                ],
-                "port": "3333"
-            },
-            "cmsis": {
-                "cbuildRunFile": "${command:cmsis-csolution.getCbuildRunFile}",
-                "updateConfiguration": "auto"
-            },
-            "preLaunchTask": "CMSIS Load"
-        },
-        {
-            "name": "M55_HP JLink AppKit-E7 traffic (launch)",
-            "type": "gdbtarget",
-            "request": "launch",
-            "cwd": "${workspaceFolder}/",
             "program": "out/traffic/AppKit-E7/Release/traffic.axf",
             "gdb": "arm-none-eabi-gdb",
             "auxiliaryGdb": true,
@@ -173,7 +123,7 @@
                 "server": "JLinkGDBServerCL",
                 "serverParameters": [
                     "-device",
-                    "AE822FA0E5597BS0_M55_HE",
+                    "AE722F80F55D5LS_M55_HE",
                     "-endian",
                     "little",
                     "-if",
@@ -203,7 +153,7 @@
             "type": "gdbtarget",
             "request": "attach",
             "cwd": "${workspaceFolder}/",
-            "program": "out/yolo/AppKit-E8/Release/yolo.axf",
+            "program": "out/traffic/AppKit-E7/Release/traffic.axf",
             "gdb": "arm-none-eabi-gdb",
             "auxiliaryGdb": true,
             "initCommands": [

@@ -56,11 +56,14 @@ const struct pinconf board_pinconf[] = {
     {PORT_0, PIN_2, PINMUX_ALTERNATE_FUNCTION_0, PADCTRL_OUTPUT_DRIVE_STRENGTH_4MA},
 
     /* P0_3 on pin R11. Functions: [0]: GPIO0_3, [1]: OSPI0_D3_A, [2]: UART0_RTS_A, [3]: I2C0_SCL_A,
-       [4]: UT1_T1_A, [5]: >>>LPCAM_XVCLK_B<<<, [6]: CAM_XVCLK_A, [7]: ANA_S3 */
-    /* Selected: LPCAM_XVCLK_B */
+       [4]: UT1_T1_A, [5]: LPCAM_XVCLK_B, [6]: >>>CAM_XVCLK_A<<<, [7]: ANA_S3 */
+    /* Selected: CAM_XVCLK_A. The pack's default is LPCAM_XVCLK_B, the clock of
+       the HE core's LPCPI; the traffic counter runs the camera on the HP core's
+       CPI, whose ARX3A0 driver enables CAMERA_PIXCLK (set_cpi_pixel_clk), so the
+       pin has to carry that clock or the sensor never answers on I2C. */
     {PORT_0,
      PIN_3,
-     PINMUX_ALTERNATE_FUNCTION_5,
+     PINMUX_ALTERNATE_FUNCTION_6,
      PADCTRL_DRIVER_DISABLED_BUS_REPEATER | PADCTRL_OUTPUT_DRIVE_STRENGTH_4MA},
 
     /* P0_4 on pin R10. Functions: [0]: GPIO0_4, [1]: OSPI0_D4_A, [2]: UART1_RX_A, [3]: PDM_D0_A,

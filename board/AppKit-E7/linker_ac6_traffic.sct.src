@@ -82,7 +82,13 @@ LR_ROM __ROM_BASE NOCOMPRESS __ROM_SIZE  {    ; load region size_region
     * (eth_buf)
     * (usb_dma_buf)
     * (sd_dma_buf)
-    * (.driver.usbd0)
+    * (.driver.usbd0)                     ; USB EP0 buffer (USBD0_BUF_MEM_LOCATE)
+    ; The USB controller reads and writes the DTCM only inside this non-secure
+    ; region: everything the SDS link hands to the USB DMA goes here too.
+    *sdsio_client_usb_mdk.o (+RW +ZI)     ; the bulk OUT buffer
+    *sdsio_client.o (+RW +ZI)             ; error data sent with the info command
+    *sds.o (+RW +ZI)                      ; the stream data block
+    * (.bss.os)                           ; RTX dynamic memory: the SDS thread's stack holds the headers it sends
   }
 
   NS_REGION_0_PAD  (AlignExpr(ImageLimit(NS_REGION_0), TGU_BLOCK_SIZE)) { ; Non secure region 0 Padding
@@ -112,6 +118,6 @@ LR_ROM __ROM_BASE NOCOMPRESS __ROM_SIZE  {    ; load region size_region
 
   ; Not initialised: the application powers SRAM1 before its first use.
   RW_SRAM1 APP_SRAM1_BASE UNINIT APP_SRAM1_SIZE  {
-   * (.bss.sram1)                         ; camera frames, model input slots
+   * (.bss.sram1)                         ; model input slots, the NPU scratch
   }
 }

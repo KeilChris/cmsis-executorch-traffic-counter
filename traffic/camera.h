@@ -55,14 +55,15 @@ extern "C" {
 #define CAMERA_QUARTER_TURNS 0
 #endif
 
-/* Frame buffers the CPI cycles through (in SRAM1): the newest complete one is
-   the application's for one frame time before the CPI comes back to it. */
-#define CAMERA_BUFFERS 3
+/* Frame buffers, in SRAM0 (the E7's CPI cannot write SRAM1: AXI decode
+   errors): the CPI takes one snapshot into one buffer while the application
+   reads the other. */
+#define CAMERA_BUFFERS 2
 
 /* Power the sensor, configure CSI-2 and the CPI, start capturing.
    0 on success, else the step that failed (1 initialize, 2 power: no sensor
    answering on I2C, 3 CPI configuration, 4 sensor configuration, 5 events,
-   7 capture start). */
+   6 auto exposure, 7 capture start). */
 int32_t camera_init(void);
 
 /* The newest completed frame (CAMERA_WIDTH x CAMERA_HEIGHT x CAMERA_BPP

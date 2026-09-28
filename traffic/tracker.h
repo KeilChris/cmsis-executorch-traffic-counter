@@ -53,6 +53,10 @@ typedef struct {
 /* `size`: the input size; the line is at `line_pos` input pixels, vertical or horizontal. */
 void tracker_init(int size, int line_pos, int vertical);
 
+/* Move the line (clamped to the picture). The live tracks take their side
+   of the new line as their starting side, so the move itself counts nothing. */
+void tracker_set_line(int line_pos, int vertical);
+
 /* One frame: match, update, count, prune. */
 void tracker_update(const detections_t *det);
 

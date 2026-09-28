@@ -24,13 +24,14 @@
 
 /* The CameraIn stream buffer holds one record and its header plus the
    transfer chunks around it; the Detections records are small. The input
-   buffer lives in SRAM1 with the camera frames (not initialised; the
-   application powers SRAM1 before rec_play_init). */
+   buffer lives in the DTCM (the CPU alone reads and writes it, over RTT):
+   SRAM1 is full with the MT9M114's two 640x480 RGB565 frames and the two
+   model input slots. */
 #define REC_PLAY_IN_BUF_MAX  (416U * 416U * 3U + 16384U)
 #define REC_PLAY_OUT_BUF     8192U
 #define REC_PLAY_WAIT_MS     30000U /* playback: longest wait for the next record (the RTT down link moves about 100 kB/s: 5 s per frame) */
 
-static uint8_t sds_in_buf[REC_PLAY_IN_BUF_MAX] __attribute__((aligned(32), section(".bss.sram1")));
+static uint8_t sds_in_buf[REC_PLAY_IN_BUF_MAX] __attribute__((aligned(32)));
 static uint8_t sds_out_buf[REC_PLAY_OUT_BUF] __attribute__((aligned(32)));
 static uint32_t in_buf_size;
 

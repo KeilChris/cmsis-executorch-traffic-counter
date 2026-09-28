@@ -74,7 +74,13 @@ static_assert(kClasses == DETECTOR_CLASSES, "class count of model/traffic.py");
 constexpr size_t kMethodPoolSize = 0x40000;
 constexpr size_t kTempPoolSize = 0x140000;
 alignas(16) uint8_t g_method_pool[kMethodPoolSize] __attribute__((section(APP_POOL_SECTION)));
-alignas(16) uint8_t g_temp_pool[kTempPoolSize] __attribute__((section(APP_POOL_SECTION)));
+#ifndef APP_TEMP_POOL_SECTION
+#define APP_TEMP_POOL_SECTION APP_POOL_SECTION
+#endif
+// The NPU's scratch (Vela's temporary tensors): on the E7 in SRAM1, which is
+// as fast as SRAM0 (both 64-bit at 400 MHz) and leaves SRAM0 to the panel
+// buffers and the camera frames.
+alignas(16) uint8_t g_temp_pool[kTempPoolSize] __attribute__((section(APP_TEMP_POOL_SECTION)));
 
 const uint8_t* g_input_rgb;  // the frame the input copy converts
 int8_t g_best[kAnchors];     // the best class score of each anchor of the last run

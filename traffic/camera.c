@@ -27,7 +27,7 @@ extern ARM_DRIVER_CPI Driver_CPI;
 
 /* In SRAM1, not initialised by the C library (linker_ac6_traffic.sct.src):
    app_main powers SRAM1 before camera_init. */
-static uint8_t camera_buffer[CAMERA_BUFFERS][CAMERA_FRAME_BYTES] __attribute__((aligned(32), section(".bss.sram1")));
+static uint8_t camera_buffer[CAMERA_BUFFERS][CAMERA_FRAME_BYTES] __attribute__((aligned(32), section(".bss.ai_pool")));  /* TEST: SRAM0 */
 
 static osEventFlagsId_t camera_flags;
 static volatile uint32_t camera_frames;  /* complete frames since the start */
@@ -37,20 +37,17 @@ static volatile uint32_t camera_latest;  /* the newest complete buffer */
 static uint32_t camera_returned;         /* camera_frames at the last camera_frame() */
 static uint32_t gain_q16 = 0x10000U;
 
-/* VSYNC: the frame that was being written is complete, the CPI starts the
-   next one into the next buffer. The first VSYNC starts the first frame. */
+/* One snapshot at a time: the CPI stops after a frame (STOP event), and
+   camera_frame() starts the next one into the other buffer from the camera
+   thread. Video mode is out on the E7: the driver refuses a new frame address
+   while the CPI is busy, and the CPI then writes frame after frame past the
+   buffer, over everything behind it. */
 static void camera_event(uint32_t event)
 {
-    if (event & ARM_CPI_EVENT_CAMERA_FRAME_VSYNC_DETECTED) {
-        static uint8_t started;
-        if (started) {
-            camera_latest  = camera_writing;
-            camera_writing = (camera_writing + 1U) % CAMERA_BUFFERS;
-            Driver_CPI.CaptureVideo(camera_buffer[camera_writing]);
-            camera_frames = camera_frames + 1U;
-            osEventFlagsSet(camera_flags, FLAG_FRAME);
-        }
-        started = 1U;
+    if (event & ARM_CPI_EVENT_CAMERA_CAPTURE_STOPPED) {
+        camera_latest = camera_writing;
+        camera_frames = camera_frames + 1U;
+        osEventFlagsSet(camera_flags, FLAG_FRAME);
     }
     if (event & CAMERA_ERRORS) {
         camera_errors = camera_errors + 1U;
@@ -72,11 +69,18 @@ int32_t camera_init(void)
     if (Driver_CPI.Control(CPI_CAMERA_SENSOR_CONFIGURE, 0U) != ARM_DRIVER_OK) {
         return 4;
     }
-    if (Driver_CPI.Control(CPI_EVENTS_CONFIGURE, ARM_CPI_EVENT_CAMERA_FRAME_VSYNC_DETECTED | CAMERA_ERRORS) != ARM_DRIVER_OK) {
+    if (Driver_CPI.Control(CPI_EVENTS_CONFIGURE, ARM_CPI_EVENT_CAMERA_CAPTURE_STOPPED | CAMERA_ERRORS) != ARM_DRIVER_OK) {
         return 5;
     }
+#if !CAMERA_RAW8
+    /* The MT9M114's ISP tracks the exposure only once asked (the pack's driver
+       writes its AE track register on this request, not at configuration). */
+    if (Driver_CPI.Control(CPI_CAMERA_SENSOR_AE, 1U) != ARM_DRIVER_OK) {
+        return 6;
+    }
+#endif
     camera_writing = 0U;
-    if (Driver_CPI.CaptureVideo(camera_buffer[0]) != ARM_DRIVER_OK) {
+    if (Driver_CPI.CaptureFrame(camera_buffer[0]) != ARM_DRIVER_OK) {
         return 7;
     }
     return 0;
@@ -93,6 +97,11 @@ const void *camera_frame(uint32_t timeout_ms)
     }
     camera_returned = camera_frames;
     const uint8_t *frame = camera_buffer[camera_latest];
+    /* The next snapshot goes into the other buffer while this one is read. */
+    camera_writing = (camera_latest + 1U) % CAMERA_BUFFERS;
+    if (Driver_CPI.CaptureFrame(camera_buffer[camera_writing]) != ARM_DRIVER_OK) {
+        camera_errors = camera_errors + 1U;
+    }
     SCB_InvalidateDCache_by_Addr((void *)frame, (int32_t)CAMERA_FRAME_BYTES);
     return frame;
 }

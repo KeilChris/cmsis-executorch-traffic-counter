@@ -160,11 +160,11 @@ solution:
             start-pname: M55_HP
 
     # Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2): the Cortex-M55 HP core with
-    # its Ethos-U55-256, the same 480x800 panel, an ARX3A0 camera. The traffic
-    # counter (traffic/traffic.cproject.yml, documentation/traffic-counter.md);
+    # its Ethos-U55-256, the same 480x800 panel, an MT9M114 camera module. The
+    # traffic counter (traffic/traffic.cproject.yml, documentation/traffic-counter.md);
     # its AI layer is ai_layer_traffic/ (YOLO26n compiled for the U55). The
     # Secure Enclave has to boot the HP core from its MRAM region:
-    # .alif/M55_HP_mram_cfg.json, the "Install M55_HP debug stubs (AppKit-E7)" task.
+    # .alif/M55_HP_mram_cfg_e7.json, the "Install M55_HP debug stubs (AppKit-E7)" task.
     - type: AppKit-E7
       board: Alif Semiconductor::AppKit-E7-AIML
       device: Alif Semiconductor::AE722F80F55D5LS:M55_HP
@@ -232,10 +232,13 @@ solution:
     - project: ./quake/quake.cproject.yml
     # The YOLO26n cat detector, on the Alif boards.
     - project: ./yolo/yolo.cproject.yml
-      for-context: [+DevKit-E8, +AppKit-E8]
+      for-context:
+        - +DevKit-E8
+        - +AppKit-E8
     # The traffic counter, on the AppKit-E7 (Ethos-U55).
     - project: ./traffic/traffic.cproject.yml
-      for-context: [+AppKit-E7]
+      for-context:
+        - +AppKit-E7
 
   # MLOps information: exported to cmsis-executorch.cbuild-mlops.yml by
   # `cbuild setup ... --active SSE-320-U85`. Retarget the NPU here and

@@ -6,17 +6,20 @@
     python traffic/sds_session.py record 20        # 20 s of CameraIn + Detections
     python traffic/sds_session.py play             # CameraIn.<n>.sds back into the detector
 
-It starts tools/sdsio_rtt_bridge.py (the J-Link's RTT channel 1 on a TCP
-socket) and SDSIO-Server (ARM::SDS utilities) in connect mode on it, then
-drives SDSIO-Server's keyboard interface through a pseudo terminal: R starts a
+It starts SDSIO-Server (ARM::SDS utilities) on the board's User USB
+(--transport usb, the default: the firmware enumerates as "SDSIO-Client")
+and drives its keyboard interface through a pseudo terminal: R starts a
 recording, P a playback, S stops, X ends the server. The firmware must be
 running (it opens the streams when the server says so, rec_play.c). Files go
 to recordings/traffic/ (CameraIn.<n>.sds, Detections.<n>.sds, and
 Detections.<n>.p.sds for a playback), next to their *.sds.yml metadata.
 
-The J-Link connect halts the core; the bridge resumes it once SDSIO-Server
-is connected. Stop any debug
-session first if the J-Link refuses a second connection.
+With --transport rtt it starts tools/sdsio_rtt_bridge.py (the J-Link's RTT
+channel 1 on a TCP socket) and SDSIO-Server in connect mode on it, for a
+firmware built with the SDS:IO:RTT layer. The J-Link connect halts the core;
+the bridge resumes it once SDSIO-Server is connected. Stop any debug session
+first if the J-Link refuses a second connection. RTT moves about one frame
+per 5 s, USB the whole 40-frame clip in 8 s.
 """
 
 from __future__ import annotations
@@ -53,20 +56,24 @@ def main() -> int:
     ap.add_argument("--map", type=Path, default=ROOT / "out/traffic/AppKit-E7/Release/traffic.axf.map")
     ap.add_argument("--workdir", type=Path, default=ROOT / "recordings/traffic")
     ap.add_argument("--port", type=int, default=5050)
+    ap.add_argument("--transport", choices=["usb", "rtt"], default="usb",
+                    help="usb: the board's User USB (SDS:IO:USB, no J-Link); rtt: the J-Link RTT bridge")
     ap.add_argument("--timeout", type=float, default=1800.0, help="longest playback in seconds")
     args = ap.parse_args()
 
     args.workdir.mkdir(parents=True, exist_ok=True)
     python = sys.executable
-    bridge = subprocess.Popen(
+    bridge = None if args.transport == "usb" else subprocess.Popen(
         [python, str(ROOT / "tools/sdsio_rtt_bridge.py"), "--device", args.device,
          "--rtt-addr", hex(rtt_address(args.map)), "--port", str(args.port)],
         stdout=sys.stderr, stderr=sys.stderr)
-    time.sleep(3.0)  # the bridge listens before it attaches
+    if bridge is not None:
+        time.sleep(3.0)  # the bridge listens before it attaches
+    interface = ["usb"] if args.transport == "usb" else ["socket", "--port", str(args.port), "--connect"]
 
     master, slave = pty.openpty()
     server = subprocess.Popen(
-        [python, str(SDS_UTILITIES / "sdsio-server.py"), "socket", "--port", str(args.port), "--connect",
+        [python, str(SDS_UTILITIES / "sdsio-server.py"), *interface,
          "--workdir", str(args.workdir), "--no-progress-info"],
         stdin=slave, stdout=slave, stderr=slave, close_fds=True)
     os.close(slave)
@@ -108,6 +115,8 @@ def main() -> int:
         pump(3.0)
     finally:
         for proc in (server, bridge):
+            if proc is None:
+                continue
             if proc.poll() is None:
                 proc.terminate()
                 try:

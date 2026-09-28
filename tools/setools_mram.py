@@ -54,6 +54,8 @@ def main() -> int:
     ap.add_argument("hex", type=Path)
     ap.add_argument("--part", choices=sorted(PARTS), default="BS0", help="BS0: AppKit-E8 (default), LS0: DevKit-E8, E7: AppKit-E7")
     ap.add_argument("--setools", type=Path, default=Path("/Applications/Alif"), help="SETOOLS root (alif.setools.root)")
+    ap.add_argument("--port", help="the board's SEUART port (SETOOLS remembers the last one otherwise)")
+    ap.add_argument("--rev", help="silicon revision for tools-config (default: B4 for the E7, else SETOOLS' current one)")
     args = ap.parse_args()
 
     start, image = hex_to_bin(args.hex)
@@ -61,7 +63,15 @@ def main() -> int:
         sys.exit(f"{args.hex}: starts at {start:#x}, not at the HP MRAM region 0x80200000")
     name = "hp_app_mram.bin"
     (args.setools / "build/images" / name).write_bytes(image)
-    config = json.loads((HERE / ".alif/M55_HP_mram_cfg.json").read_text())
+    # The E7 has its own boot table: its DEVICE object is the SETOOLS default
+    # (open firewall) with the E7 part in its metadata. The E8's device
+    # configuration in an E7's table leaves the interconnect firewall at its
+    # defaults: the CPI's frame writes to SRAM1 then fail with AXI DECERR.
+    cfg_name = "M55_HP_mram_cfg_e7.json" if args.part == "E7" else "M55_HP_mram_cfg.json"
+    config = json.loads((HERE / ".alif" / cfg_name).read_text())
+    device_config = config["DEVICE"]["binary"]
+    if (HERE / ".alif" / device_config).exists():
+        shutil.copy(HERE / ".alif" / device_config, args.setools / "build/config" / device_config)
     config["HP_APP"]["binary"] = name
     config_file = args.setools / "build/config/hp_app_mram_cfg.json"
     config_file.write_text(json.dumps(config, indent=4))
@@ -74,7 +84,8 @@ def main() -> int:
         if result.returncode != 0:
             sys.exit(f"[setools] {' '.join(cmd)} failed ({result.returncode}): {result.stderr.strip()}")
 
-    run("./tools-config", "-p", PARTS[args.part])
+    rev = args.rev or ("B4" if args.part == "E7" else None)  # utils/featuresDB.db: Fusion (E7) knows B4 only
+    run("./tools-config", "-p", PARTS[args.part], *(["-r", rev] if rev else []), *(["-c", args.port] if args.port else []))
     run("./app-gen-toc", "-f", str(config_file.relative_to(args.setools)))
     # The board's A1 silicon differs from the A0 the tools expect: confirm with y.
     run("./app-write-mram", "-p", answer="y\n")

@@ -45,6 +45,8 @@ project:
         # The tracks and the counting line.
         - file: ./tracker.c
         - file: ./tracker.h
+        - file: ./joystick.c
+        - file: ./joystick.h
         # The Ethos-U driver waits on RTX semaphores, not in a __WFE loop.
         - file: ./ethosu_rtos.c
         # The camera (ARX3A0 RAW8 Bayer, or an MT9M114's RGB565, through the CPI) and the pixel work.

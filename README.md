@@ -1,185 +1,195 @@
-# ExecuTorch on Ethos-U85: hackathon guide
+# Traffic counter on the Alif AppKit-E7: YOLO26n on the Ethos-U55
 
-The Arm ExecuTorch example, on its `hackathon` branch with the Alif board
-added. One CMSIS solution runs an ExecuTorch program on the Ethos-U85 of the **Alif Ensemble E8 DevKit** (Cortex-M55
-HP core) and on the **Corstone-320 FVP**; you switch between them by
-target-type. The program is the **NPU render** prototype: the NPU does the
-vertex transform, the deferred shading and the upscaling of a small 3D scene,
-the CPU rasterizes in between with Helium, and the DevKit's LCD shows it;
-see [documentation/npu-render.md](documentation/npu-render.md). The model is exported from PyTorch in three steps: the
-CMSIS-Toolbox describes the target, `create_ai_layer.py` turns that into the
-AI layer, the toolbox builds the application. This page takes you from an
-empty machine to a debug session on the board. Everything about the example
-itself is in [documentation/example.md](documentation/example.md).
+An Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2) counts the vehicles its camera
+sees. Ultralytics YOLO26n, exported with ExecuTorch and compiled by Vela, runs
+whole on the Ethos-U55-256 next to the Cortex-M55 HP core and finds bicycles,
+cars, motorcycles, buses and trucks in each 416x416 frame. A small tracker
+follows them from frame to frame and counts each one once, per class and
+direction, as it crosses a line on the picture. The panel shows the camera
+picture, the boxes, the line and the tallies, and the joystick moves the line.
+Over the board's User USB, SDS records the model inputs and detections, or
+plays a recorded clip back into the detector instead of the camera.
+
+| | |
+|---|---|
+| NPU | 81 ms per 416x416 frame (1.13 GMAC, 2.46 MB program in MRAM) |
+| Loop with the camera | 11.5 fps; the camera conversion runs while the NPU works |
+| SDS over USB | a 40-frame clip (20.7 MB) plays in about 8 s |
+
+The repository is a fork of the Arm example
+[cmsis-executorch](https://github.com/Arm-Examples/cmsis-executorch): one CMSIS
+solution with several projects and targets. The traffic counter is
+`traffic/traffic.cproject.yml`, target-type **AppKit-E7**. The other projects
+(the Corstone-320 example, the NPU render and Quake on the DevKit-E8, the cat
+detector on the AppKit-E8) are still there; the
+[documentation](#read-on) covers them. The full technical description of the
+traffic counter is [documentation/traffic-counter.md](documentation/traffic-counter.md).
 
 ## 1. Host tools
 
-1. Install [VS Code](https://code.visualstudio.com/).
-2. Install the extensions **Keil Studio Pack** (`Arm.keil-studio-pack`, which
-   brings the CMSIS Solution extension 1.70.0 or newer that the project's
-   task drop-ins need) and **Python** (`ms-python.python`). Sign in with an
-   Arm account when Keil Studio asks; the free Keil MDK Community license is
-   enough.
-3. Nothing else by hand: when you open the project, the Arm Tools Environment
-   Manager offers to install the tools pinned in `vcpkg-configuration.json`
-   (CMSIS-Toolbox, Arm Compiler 6, GCC, CMake, Ninja, and on Linux and
-   Windows the Corstone-320 FVP; macOS runs it in Docker, see step 8). Accept.
-4. Optional: the **CMSIS Developer Assistant** extension lets an AI agent
-   (Claude Code or GitHub Copilot Chat) build, flash and debug the board
-   through an MCP server. Install it, install one of the agents, run
-   **CMSIS Developer Assistant: Configure Agents and Skills** from the command
-   palette and pick at least the `cmsis-debug-live` and `cmsis-help` skills.
-
-## 2. Alif and SEGGER tools (board only)
-
-1. **Alif SETOOLS** V1.110.000 or later from the
+1. [VS Code](https://code.visualstudio.com/) with the extensions **Keil
+   Studio Pack** (`Arm.keil-studio-pack`, CMSIS Solution 1.70.0 or newer) and
+   **Python** (`ms-python.python`). Sign in with an Arm account when Keil
+   Studio asks; the free Keil MDK Community license is enough. When the
+   folder opens, accept the tools that the Arm Tools Environment Manager
+   offers from `vcpkg-configuration.json` (CMSIS-Toolbox, Arm Compiler 6,
+   CMake, Ninja). The traffic counter builds with Arm Compiler 6 only.
+2. **Alif SETOOLS** from the
    [Alif software and tools page](https://alifsemi.com/support/software-tools/ensemble/)
-   (login required). Unpack it; on Linux and macOS make the tools executable
-   and install the Python packages its README lists. Add the root directory
-   (the one with `app-gen-toc` and `app-write-mram`) to your VS Code user
-   settings:
+   (login required). Set its root directory, the one with `app-gen-toc` and
+   `app-write-mram`, in your VS Code user settings:
 
    ```json
    "alif.setools.root": "/absolute/path/to/setools"
    ```
 
-2. **SEGGER J-Link Software** V8.42 or later from
+3. **SEGGER J-Link Software** V8.42 or later from
    [segger.com](https://www.segger.com/downloads/jlink/). The board has an
    on-board J-Link.
+4. Python `>=3.10,<3.14` for the test image and the tools, and for SDS the
+   Python packages of SDSIO-Server (`utilities/requirements.txt` of the
+   `ARM::SDS` 3.1.0 pack; the USB interface needs libusb). `ffmpeg` if you
+   want to turn a video into a playback.
 
-## 3. Board
+## 2. Board
 
-- Connect a USB-C cable to **PRG USB** (the connector in the corner). It
-  powers the board and carries the J-Link and a USB-to-UART bridge. Leave
-  **MCU USB** unconnected.
-- Jumpers at their defaults: **JP5 on 1-2**, **JP7 on 3-4**. Never move
-  jumpers with power applied.
-- **SW4** selects what the UART bridge is connected to:
+- **PRG USB** to the host: power, the on-board J-Link and the Secure
+  Enclave's UART.
+- **User USB (J1)** to the host for SDS recording and playback (optional).
+- The camera module the Gen 2 kit ships with, an MT9M114 on the MIPI
+  connector, and the 480x800 MIPI DSI panel.
+- **SW4** on `SEUART` while SETOOLS runs. The application does not use a
+  UART: its console is a log buffer in the DTCM that the debugger reads.
 
-  | SW4 | Connected to | Used for |
-  |-----|--------------|----------|
-  | `SEUART` (default) | Secure Enclave UART | SETOOLS (step 5) |
-  | `UART4` | Application UART4, 115200 8N1 | The example's console (step 6) |
-
-- With the board attached, run these once: in the SETOOLS directory
-  `updateSystemPackage -d` (SW4 on `SEUART`; picks the serial port, checks the
-  system firmware, offers to make the E8 the default target: answer yes), and
-  J-Link Commander (`JLinkExe`, `JLink.exe` on Windows), which updates the
-  on-board J-Link firmware and installs its serial-port drivers.
-
-## 4. Project
+## 3. Project and build
 
 ```bash
-git clone https://github.com/Arm-Examples/CMSIS-Executorch.git
-cd CMSIS-Executorch
-git checkout hackathon
+git clone https://github.com/MatthiasHertelArm/cmsis-executorch-traffic-counter.git
+cd cmsis-executorch-traffic-counter
+./setup_venv.sh && .venv/bin/python -m pip install ultralytics
+.venv/bin/python traffic/make_test_image.py
 ```
 
-Open the folder in VS Code and accept the tool activation and the pack
-installation (`PyTorch::ExecuTorch`, `AlifSemiconductor::Ensemble`, CMSIS).
-In the CMSIS view open **Manage Solution**, choose the target-type
-**DevKit-E8** (or **SSE-320-U85** for the FVP) and click **Apply**.
+`make_test_image.py` writes `traffic/test_image.c`, the image the detector
+runs on until the camera delivers. It is generated from a COCO photo that is
+not ours to redistribute, so it is not in the repository, and the build needs
+it. The AI layer `ai_layer_traffic/` is committed; regenerate it only after
+changing `model/traffic.py`:
 
-The repository ships a generated AI layer, so no Python is needed to build.
-To change the model, run **Terminal > Run Task > Setup Python virtual
-environment** once (several GB of PyTorch, takes a while; the **(uv)**
-variant of the task uses uv and can download the Python version it asks
-for), edit `model/model.py`, and run the task **Create AI layer** before
-building.
+```bash
+MODEL_FLAVOR=traffic .venv/bin/python create_ai_layer.py ai_layer_traffic/cmsis-executorch.cbuild-mlops.yml
+```
 
-## 5. Prepare the board once
+Open the folder in VS Code and accept the pack installation
+(`PyTorch::ExecuTorch`, `AlifSemiconductor::Ensemble`, `ARM::SDS`,
+`Keil::MDK-Middleware`). In the CMSIS view open **Manage Solution**, choose
+the target-type **AppKit-E7** and click **Apply**, then **Build**. From the
+command line:
 
-The Secure Enclave boots the M55 cores from a table of contents in MRAM; the
-debugger needs that table to point at a debug stub.
+```bash
+cbuild cmsis-executorch.csolution.yml --active AppKit-E7 --packs
+```
 
-1. SW4 to **SEUART**, PRG USB attached.
-2. **Terminal > Run Task > Alif: Install M55_HP debug stubs (DevKit-E8, single core configuration)**. Choose COM port
-   discovery (`-d`) the first time; SETOOLS remembers the port. The task
-   copies the configuration and stub from `.alif/` into the SETOOLS tree and
-   runs `app-gen-toc` and `app-write-mram`.
-3. SW4 to **UART4**.
+The image is `out/traffic/AppKit-E7/Release/traffic.axf`.
 
-Repeat this after another project has reprogrammed the table.
+## 4. Prepare the board once
 
-## 6. Build, run, debug
+The Secure Enclave boots the HP core from a table of contents in MRAM, which
+must point at the HP core's MRAM region and carry the E7's own device
+configuration (with the E8's, the camera DMA cannot reach its buffers).
 
-1. With SW4 on **UART4**, open the **Serial Monitor** panel on the PRG USB
-   port, 115200 baud.
-2. In the CMSIS view click **Build**, then **Debug** (or **Run**). Keil Studio
-   starts the J-Link GDB server over SWD, loads the image into MRAM and stops
-   at `main`; continue with F5. The console shows:
+1. SW4 on **SEUART**, PRG USB attached.
+2. **Terminal > Run Task > Alif: Install M55_HP debug stubs (AppKit-E7,
+   single core configuration)**. It installs `.alif/M55_HP_mram_cfg_e7.json`
+   and `.alif/app-device-config-e7.json` into SETOOLS, selects the E7 with
+   silicon revision B4 and writes the table. Choose COM port discovery (`-d`)
+   the first time. If `app-write-mram` gets no answer, press the board's reset
+   button while it waits.
 
-   ```text
-   Ethos-U version info:
-       Arch:       v2.0.0
-       MACs/cc:    256
-       Cmd stream: v1
-   NPU render: Ethos-U85 as a tensor coprocessor for a 3D pipeline, Helium on the CPU
-     program: 18192 bytes, 8 objects x 512 vertices, G-buffer 240x400 int8, frame 480x800 RGB888
-     scene: 8 objects, 2208 vertices, 4224 triangles (12672 index slots)
-     display: 480x800 RGB888 on (status 0)
-   frames 0..119 avg: vertex-NPU 339 us (copy 169) | post-vertex 677 us | raster 18520 us (...) | shade-NPU 24731 us (frame copy 2529, vsync wait 0) | check 63561 us | frame 45.4 ms = 22.0 fps | max err 2.6/255
-   ```
+`tools/setools_mram.py --part E7 out/traffic/AppKit-E7/Release/traffic.hex`
+does the same and programs the application itself through the Secure
+Enclave, without the J-Link.
 
-   and the board's LCD shows two interlocked tori, a sphere weaving through
-   them and five small bodies orbiting the whole: lit by three lights with
-   highlights, ambient occlusion, fog and bloom by the NPU, rasterized by
-   the M55 with Helium. A line `SDS: no SDSIO-Server on the RTT channel,
-   not recording` is normal; with the SDS tools running it records the
-   frames as a video instead, see "Recording a video" in
-   [documentation/npu-render.md](documentation/npu-render.md#recording-a-video-of-the-target-with-sds).
+## 5. Run and debug
 
-3. Set a breakpoint after `module.execute(MODEL_SHADE_METHOD, ...)` in
-   `src/app_main.cpp` and inspect the G-buffer or the frame buffer, or ask
-   the CMSIS Developer Assistant to do it: "Build for the DevKit-E8, load it,
-   break after the shade method and read a row of the back frame buffer."
+In the CMSIS view click **Run** or **Debug**: the J-Link loads the image into
+MRAM and starts it. The panel shows the camera picture with the line and the
+tallies after a few seconds.
 
-**FVP instead of the board:** choose the **SSE-320-U85** target-type and click
-**Run** or **Debug**; the same output appears in the terminal. On macOS the
-FVP runs in Docker (Docker Desktop must be running; the first run builds the
-image, about 100 MB). On Windows set `model:` in the csolution's SSE-320-U85
-target-set to `FVP_Corstone_SSE-320`.
+- **Console:** `JLINK_DEVICE=AE722F80F55D5LS_M55_HP .venv/bin/python tools/devkit.py log out/traffic/AppKit-E7/Release/traffic.axf.map`
+  prints the `console_log` buffer, with the tallies every 100 frames.
+- **Status:** the global `traffic_status` holds the tallies, the frame
+  counters, the time of each step in microseconds, the camera state, the live
+  tracks and the latest detections. Writing 1 to `traffic_reset_counts`
+  zeroes the tallies.
+- **The line:** horizontal through the middle by default. The joystick moves
+  it (left and right a vertical line, up and down a horizontal one) and the
+  centre button turns it by 90 degrees. The build-time default is
+  `TRAFFIC_LINE_POS` and `TRAFFIC_LINE_VERTICAL` in `traffic/traffic.cproject.yml`.
+
+## 6. Record and play back (SDS)
+
+With the application running and the User USB connected, these VS Code tasks
+(Terminal > Run Task) drive SDSIO-Server through `traffic/sds_session.py`:
+
+| Task | Does |
+|------|------|
+| SDS: record from the camera (USB) | records `CameraIn` (the model inputs) and `Detections` for a number of seconds into `recordings/traffic/` |
+| SDS: video to CameraIn stream | turns a video into `recordings/traffic/playback/CameraIn.0.sds` with ffmpeg, letterboxed or cut to fill the square input |
+| SDS: play recording to the board (USB) | plays `CameraIn.<n>.sds` of a folder into the detector instead of the camera, records the board's detections next to it |
+| SDS: check playback against the host model | lists the board's detections next to the float model's on the same inputs |
+
+`traffic/count_playback.py <folder> [--sweep]` runs the tracker's logic on
+the PC over the board's detections of a playback and over the float model's,
+and shows which line positions the traffic actually crosses. One SDSIO server
+owns the USB device at a time: let a run finish or stop it with Ctrl+C
+before starting the next.
 
 ## 7. If something does not work
 
-- **J-Link connects but never stops at `main`:** the table of contents does
-  not point at the debug stub. Repeat step 5.
-- **Debug hangs at "Connecting":** the target-set was switched to
-  `protocol: jtag`. Keep SWD: the generated load task blocks on JLinkExe's
-  JTAG-chain prompt, and the device stays in SWD mode after any SWD use
-  until it is power-cycled.
-- **No console output:** SW4 is still on `SEUART`, or the port was opened
-  before the switch was moved. Set `UART4` and reopen the port.
-- **The board hard-faults right after a flash, before printing anything:**
-  the J-Link loader (`CMSIS Load`, `JLinkExe LoadFile`) can corrupt the
-  first 16 bytes of the image in MRAM and report `Programming failed @
-  address 0x80200004 (block verification error)`; the reset vector then reads
-  as code bytes. Program with pyOCD instead (`pyocd load --cbuild-run
-  out/cmsis-executorch+DevKit-E8.cbuild-run.yml`, or the CMSIS Developer
-  Assistant's flash tool), which uses the pack's flash algorithm and leaves
-  the Secure Enclave's table of contents untouched, then Debug or reset.
-  pyOCD has done the same once while the previous image was running: check
-  that the word at `0x80200004` is a `0x8020xxxx` address after programming
-  (`pyocd commander ... -c "read32 0x80200000 16"`); if not, `reset halt`
-  first and program again.
-- **`app-write-mram` gets no answer:** press reset while it waits, check SW4
-  is on `SEUART`, close any terminal holding the port.
-- **"torch is not installed":** run the task **Setup Python virtual
-  environment** first; it is only needed to regenerate the AI layer.
-- After **Apply**, the extension adds a J-Link entry to `.vscode/launch.json`
-  next to the committed FVP entry. That is expected.
+- **The application never gets past the Secure Enclave handshake** (the log
+  shows no frames, `SRAM1: power request failed`): the Secure Enclave has
+  stopped answering. A reset does not help; power-cycle the board (unplug PRG
+  USB), wait about 40 s, and load again.
+- **SETOOLS says "Revision is invalid":** `tools-config -p` reset the
+  revision to A0. The AppKit-E7 is B4: the task and `tools/setools_mram.py`
+  pass `-r B4`.
+- **The build fails in CMake** (`toolchain.cmake ... could not find requested
+  file`) after a CMSIS Solution extension update: delete `tmp/AppKit-E7` and
+  build again.
+- **The debugger cannot start its GDB server:** another debug session holds
+  the port. Stop it, or change the ports in the launch configuration.
+- **The first inference after a debugger reset reports error 35:** the NPU
+  was still busy with the job from before the reset. The loop recovers on its
+  own.
+- **The picture never changes, or the board and its debug port die while the
+  camera runs:** the table of contents carries another device's
+  configuration. Repeat step 4. Keep the camera frames and the panel buffers
+  in SRAM0: neither the camera DMA nor the display controller reaches SRAM1,
+  and SRAM8 hangs the bus.
+
+## Licences
+
+The code is under the Apache License 2.0 ([LICENSE](LICENSE)). The YOLO26n
+weights compiled into `ai_layer_traffic/` and `ai_layer_yolo/` come from
+Ultralytics and are under the AGPL-3.0; `model/` fetches them with the
+`ultralytics` package. `src/LICENSE-ExecuTorch` covers the ExecuTorch
+sources (BSD-3-Clause). The Quake sources and data (GPL) are fetched, never
+committed.
 
 ## Read on
 
-- [documentation/example.md](documentation/example.md): the example, the
-  command-line flow, how the model is generated.
-- [board/DevKit-E8/README.md](board/DevKit-E8/README.md): the board layer,
-  memory map and RTE configuration.
+- [documentation/traffic-counter.md](documentation/traffic-counter.md): the
+  traffic counter in detail (model, pipeline, memory map, camera bring-up on
+  the E7, SDS over USB, NPU performance and its PMU counters).
+- [documentation/yolo-cats.md](documentation/yolo-cats.md): the cat detector
+  on the AppKit-E8 that the traffic counter was forked from.
+- [documentation/example.md](documentation/example.md): the underlying
+  ExecuTorch example, the command-line flow, how the model is generated.
 - [documentation/mlops-flow.md](documentation/mlops-flow.md): the `mlops:`
   node and `*.cbuild-mlops.yml` in detail.
-- [documentation/traffic-counter.md](documentation/traffic-counter.md): the
-  traffic counter, YOLO26n on the Ethos-U55 of the AppKit-E7 with a tracker
-  and a counting line; a fork of the cat detector
-  ([documentation/yolo-cats.md](documentation/yolo-cats.md)).
+- [documentation/npu-render.md](documentation/npu-render.md) and
+  [documentation/npu-quake.md](documentation/npu-quake.md): the DevKit-E8
+  projects in the same solution.
 - [documentation/pack-provenance.md](documentation/pack-provenance.md): where
-  the `PyTorch::ExecuTorch` pack comes from and how to move to a new version.
+  the `PyTorch::ExecuTorch` pack comes from.

@@ -83,6 +83,161 @@
                 }
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Alif: Install M55_HE debug stubs (AppKit-E8-HE, single core configuration)",
+            "detail": "Programs the ATOC/MRAM stubs with Alif SETOOLS so the M55_HE core boots from MRAM 0x80000000 and J-Link can load and debug it (the M55_HP gets a TCM stub). Set SW4 to SEUART, set 'alif.setools.root' in your VS Code settings.",
+            "type": "shell",
+            "command": [
+                "cp './.alif/M55_HE_mram_cfg.json' '${config:alif.setools.root}/build/config/M55_HE_mram_cfg.json';",
+                "cp './.alif/M55_HE_mram_stub.bin' '${config:alif.setools.root}/build/images/M55_HE_mram_stub.bin';",
+                "cd '${config:alif.setools.root}';",
+                "./tools-config -p 'E8 (AE822FA0E5597BS0) - 5.5 MRAM / 9.75 SRAM';",
+                "./app-gen-toc -f 'build/config/M55_HE_mram_cfg.json';",
+                "./app-write-mram -p ${input:discoverCOM};"
+            ],
+            "windows": {
+                "options": {
+                    "shell": {
+                        "executable": "powershell.exe",
+                        "args": [
+                            "-Command"
+                        ]
+                    }
+                }
+            },
+            "linux": {
+                "options": {
+                    "shell": {
+                        "executable": "/bin/bash",
+                        "args": [
+                            "-c"
+                        ]
+                    }
+                }
+            },
+            "osx": {
+                "options": {
+                    "shell": {
+                        "executable": "/bin/bash",
+                        "args": [
+                            "-c"
+                        ]
+                    }
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Alif: Install M55_HP debug stubs (AppKit-E8, single core configuration)",
+            "detail": "As the DevKit-E8 task, for the AppKit's device (AE822FA0E5597BS0): a boot table built for the DevKit's part is skipped by the Secure Enclave. Set SW4 to SEUART, set 'alif.setools.root' in your VS Code settings.",
+            "type": "shell",
+            "command": [
+                "cp './.alif/M55_HP_mram_cfg.json' '${config:alif.setools.root}/build/config/M55_HP_mram_cfg.json';",
+                "cp './.alif/M55_HP_mram_stub.bin' '${config:alif.setools.root}/build/images/M55_HP_mram_stub.bin';",
+                "cd '${config:alif.setools.root}';",
+                "./tools-config -p 'E8 (AE822FA0E5597BS0) - 5.5 MRAM / 9.75 SRAM';",
+                "./app-gen-toc -f 'build/config/M55_HP_mram_cfg.json';",
+                "./app-write-mram -p ${input:discoverCOM};"
+            ],
+            "options": {
+                "shell": {
+                    "executable": "/bin/bash",
+                    "args": [
+                        "-c"
+                    ]
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Alif: Install M55_HP debug stubs (AppKit-E7, single core configuration)",
+            "detail": "As the DevKit-E8 task, for the AppKit-E7's device (AE722F80F55D5LS); the traffic counter's HP core boots from the MRAM. The AppKit-E7 is silicon revision B4 (tools-config -p resets it to A0, and every later step then says 'Revision is invalid'). Set SW4 to SEUART, set 'alif.setools.root' in your VS Code settings.",
+            "type": "shell",
+            "command": [
+                "cp './.alif/M55_HP_mram_cfg_e7.json' '${config:alif.setools.root}/build/config/M55_HP_mram_cfg_e7.json';",
+                "cp './.alif/app-device-config-e7.json' '${config:alif.setools.root}/build/config/app-device-config-e7.json';",
+                "cp './.alif/M55_HP_mram_stub.bin' '${config:alif.setools.root}/build/images/M55_HP_mram_stub.bin';",
+                "cd '${config:alif.setools.root}';",
+                "./tools-config -p 'E7 (AE722F80F55D5LS) - 5.5 MRAM / 13.5 SRAM' -r B4;",
+                "./app-gen-toc -f 'build/config/M55_HP_mram_cfg_e7.json';",
+                "./app-write-mram -p ${input:discoverCOM};"
+            ],
+            "options": {
+                "shell": {
+                    "executable": "/bin/bash",
+                    "args": [
+                        "-c"
+                    ]
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "SDS: play recording to the board (USB)",
+            "detail": "Plays CameraIn.<n>.sds of the chosen folder into the detector over the User USB (SDS:IO:USB firmware, board running) and records Detections.<n>.p.sds next to it. One SDSIO server at a time: stop any other playback first.",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "traffic/sds_session.py",
+                "play",
+                "--transport",
+                "usb",
+                "--workdir",
+                "recordings/traffic/${input:sdsRecording}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "SDS: record from the camera (USB)",
+            "detail": "Records CameraIn (model inputs) and Detections from the live camera for the given seconds into recordings/traffic over the User USB.",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "traffic/sds_session.py",
+                "record",
+                "${input:sdsSeconds}",
+                "--transport",
+                "usb"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "SDS: check playback against the host model",
+            "detail": "Lists the board's detections of the last playback of the chosen folder next to the float model's on the same inputs.",
+            "type": "shell",
+            "command": "${workspaceFolder}/.venv/bin/python",
+            "args": [
+                "traffic/images_to_sds.py",
+                "check",
+                "recordings/traffic/${input:sdsRecording}"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "SDS: video to CameraIn stream",
+            "detail": "Extracts frames from a video with ffmpeg at the given rate and builds recordings/traffic/playback/CameraIn.0.sds (letterboxed or filled), ready for 'SDS: play recording to the board'.",
+            "type": "shell",
+            "command": "rm -rf .sds_frames && mkdir -p .sds_frames && ffmpeg -v error -i \"${input:sdsVideo}\" -vf fps=${input:sdsFps} -q:v 3 .sds_frames/f%06d.jpg && rm -rf recordings/traffic/playback && ${workspaceFolder}/.venv/bin/python traffic/images_to_sds.py make ${input:sdsFraming} recordings/traffic/playback .sds_frames/f*.jpg && rm -rf .sds_frames",
+            "options": {
+                "cwd": "${workspaceFolder}",
+                "shell": {
+                    "executable": "/bin/bash",
+                    "args": [
+                        "-c"
+                    ]
+                }
+            },
+            "problemMatcher": []
         }
     ],
     "inputs": [
@@ -107,6 +262,46 @@
             "type": "promptString",
             "description": "Python version for uv (>=3.10,<3.15), e.g. 3.12 or 3.12.10",
             "default": "3.12"
+        },
+        {
+            "id": "sdsRecording",
+            "type": "promptString",
+            "description": "Recording folder under recordings/traffic (with CameraIn.<n>.sds for a playback): playback is what 'SDS: video to CameraIn stream' writes, . the top level that 'SDS: record from the camera' writes",
+            "default": "playback"
+        },
+        {
+            "id": "sdsSeconds",
+            "type": "promptString",
+            "description": "Recording length in seconds",
+            "default": "20"
+        },
+        {
+            "id": "sdsVideo",
+            "type": "promptString",
+            "description": "Video file to convert (any format ffmpeg reads)",
+            "default": ""
+        },
+        {
+            "id": "sdsFps",
+            "type": "promptString",
+            "description": "Frames per second to take from the video (the board detects about 11 per second)",
+            "default": "5"
+        },
+        {
+            "id": "sdsFraming",
+            "type": "pickString",
+            "description": "How a wide frame meets the square model input",
+            "options": [
+                {
+                    "label": "fill: cut the sides, no black bars",
+                    "value": "--fill"
+                },
+                {
+                    "label": "letterbox: keep the whole frame, bars above and below",
+                    "value": ""
+                }
+            ],
+            "default": "--fill"
         }
     ]
 }

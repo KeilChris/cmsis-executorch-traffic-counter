@@ -39,6 +39,11 @@
 
 #include "detector.h"
 #include "image.h"
+#ifdef TRAFFIC_LCD_MADCTL
+extern "C" {
+#include "DSI_DCS.h"  // the pack header has no C++ guard
+}
+#endif
 #include "model_pte.h"
 #include "test_image.h"
 #include "tracker.h"
@@ -50,6 +55,9 @@
 #endif
 #ifdef APP_HAS_SDS
 #include "rec_play.h"
+#endif
+#ifdef APP_HAS_JOYSTICK
+#include "joystick.h"
 #endif
 
 #ifndef TRAFFIC_LINE_POS
@@ -114,7 +122,13 @@ constexpr int kSlots = 2;
 alignas(32) uint8_t g_slot[kSlots][kInputBytes] __attribute__((section(".bss.sram1")));
 
 #ifdef APP_HAS_DISPLAY
-// Both frame buffers in SRAM0.
+// Two frame buffers: the picture and the overlays go into the one the panel
+// does not show, then the panel switches. With one buffer the picture copy
+// wiped the overlays a few milliseconds before they were drawn again, and
+// boxes, line and text flickered. On the E7 the second buffer fits SRAM0 only
+// because the NPU's scratch went to SRAM1 (detector.cpp, the layer's
+// APP_TEMP_POOL_SECTION); the CDC200 cannot read SRAM1, and SRAM8 hangs the
+// bus (see the documentation).
 constexpr uint32_t kFrameBytes = IMAGE_PANEL_W * IMAGE_PANEL_H * 3;
 alignas(32) uint8_t g_framebuffer0[kFrameBytes] __attribute__((section(APP_FRAMEBUFFER_SECTION)));
 alignas(32) uint8_t g_framebuffer1[kFrameBytes] __attribute__((section(APP_FRAMEBUFFER_SECTION)));
@@ -231,8 +245,8 @@ void draw_status(uint8_t* fb, const traffic_counts_t& counts, const detector_sco
   image_text(fb, 12, 6, 2, "TRAFFIC COUNTER  YOLO26N  ETHOS-U55", kDim);
   snprintf(line, sizeof(line), "%lu", static_cast<unsigned long>(counts.total));
   image_text(fb, 12, 24, 5, line, kWhite);
-  const char* dir0 = TRAFFIC_LINE_VERTICAL ? "RIGHT" : "DOWN";
-  const char* dir1 = TRAFFIC_LINE_VERTICAL ? "LEFT" : "UP";
+  const char* dir0 = tracker_line_vertical() ? "RIGHT" : "DOWN";
+  const char* dir1 = tracker_line_vertical() ? "LEFT" : "UP";
   snprintf(line, sizeof(line), "%s %lu", dir0, static_cast<unsigned long>(counts.by_direction[0]));
   image_text(fb, 160, 26, 2, line, kGrey);
   snprintf(line, sizeof(line), "%s %lu", dir1, static_cast<unsigned long>(counts.by_direction[1]));
@@ -325,7 +339,50 @@ __NO_RETURN void display_thread(void*) {
 }
 #endif
 
+#ifdef APP_HAS_JOYSTICK
+// ---------------------------------------------------------------------------
+// The joystick: polled from its own thread, because a read of the low-power
+// GPIO block takes milliseconds (17 ms for the five switches from the vision
+// thread, which made the frame miss the panel's refresh and flicker). At the
+// lowest priority the polls run while the vision thread waits for the NPU.
+// Left/right move a vertical line, up/down a horizontal one, faster once
+// held for a second; the centre turns the line by 90 degrees. The vision
+// thread applies the request between two tracker updates.
+// ---------------------------------------------------------------------------
+volatile int g_line_req_pos = TRAFFIC_LINE_POS;
+volatile int g_line_req_vertical = TRAFFIC_LINE_VERTICAL;
+uint64_t g_joystick_stack[256] __attribute__((section(APP_POOL_SECTION)));
+
+__NO_RETURN void joystick_thread(void*) {
+  constexpr uint32_t kPollMs = 40;
+  uint32_t held_polls = 0;
+  for (;;) {
+    osDelay(kPollMs);
+    const uint32_t pressed = joystick_pressed();
+    const uint32_t held = joystick_held();
+    int pos = g_line_req_pos;
+    int vertical = g_line_req_vertical;
+    if (pressed & JOY_SELECT) vertical = !vertical;
+    const uint32_t back = vertical ? JOY_LEFT : JOY_UP;
+    const uint32_t forth = vertical ? JOY_RIGHT : JOY_DOWN;
+    held_polls = (held & (back | forth)) ? held_polls + 1 : 0;
+    const int step = held_polls > 1000 / kPollMs ? 6 : 2;
+    if (held & back) pos -= step;
+    if (held & forth) pos += step;
+    pos = pos < 0 ? 0 : (pos >= kSize ? kSize - 1 : pos);
+    if (pressed & JOY_SELECT) printf("line: %s at %d\n", vertical ? "vertical" : "horizontal", pos);
+    g_line_req_pos = pos;
+    g_line_req_vertical = vertical;
+  }
+}
+#endif
+
 }  // namespace
+
+#ifndef TRAFFIC_CAMERA_AUTOSTART
+#define TRAFFIC_CAMERA_AUTOSTART 1
+#endif
+extern "C" volatile int traffic_camera_enable = TRAFFIC_CAMERA_AUTOSTART;
 
 extern "C" int app_main(void) {
   setvbuf(stdout, nullptr, _IONBF, 0);
@@ -380,9 +437,48 @@ extern "C" int app_main(void) {
     return 1;
   }
   tracker_init(kSize, TRAFFIC_LINE_POS, TRAFFIC_LINE_VERTICAL);
+#ifdef APP_HAS_JOYSTICK
+  if (joystick_init() != 0) {
+    printf("joystick: not available\n");
+  } else {
+    static const osThreadAttr_t attr = {.name = "joystick", .stack_mem = g_joystick_stack,
+                                        .stack_size = sizeof(g_joystick_stack), .priority = osPriorityLow};
+    osThreadNew(joystick_thread, nullptr, &attr);
+  }
+#endif
+
+#if TRAFFIC_SE_DIAG
+  // Diagnostic (2026-09-25): what the Secure Enclave made of the boot table,
+  // and whether it accepts the DEVICE object (the interconnect firewall).
+  {
+    static SERVICES_toc_data_t toc;
+    uint32_t err = 0;
+    uint32_t rc = SERVICES_system_get_toc_data(se_services_s_handle, &toc, &err);
+    printf("SE toc: rc %lu err %lu, %lu entries\n", static_cast<unsigned long>(rc), static_cast<unsigned long>(err),
+           static_cast<unsigned long>(toc.number_of_toc_entries));
+    for (uint32_t i = 0; i < toc.number_of_toc_entries && i < SERVICES_NUMBER_OF_TOC_ENTRIES; ++i) {
+      const SERVICES_toc_info_t& e = toc.toc_entry[i];
+      printf("  %-8.8s v%lx cpu %lu store %08lx load %08lx boot %08lx size %lu flags %08lx %s\n",
+             reinterpret_cast<const char*>(e.image_identifier), static_cast<unsigned long>(e.version),
+             static_cast<unsigned long>(e.cpu), static_cast<unsigned long>(e.store_address),
+             static_cast<unsigned long>(e.load_address), static_cast<unsigned long>(e.boot_address),
+             static_cast<unsigned long>(e.image_size), static_cast<unsigned long>(e.flags),
+             reinterpret_cast<const char*>(e.flags_string));
+    }
+    static uint8_t rev[80];
+    err = 0;
+    rc = SERVICES_get_se_revision(se_services_s_handle, rev, &err);
+    printf("SE revision: rc %lu err %lu: %s\n", static_cast<unsigned long>(rc), static_cast<unsigned long>(err), rev);
+    err = 0;
+    rc = SERVICES_boot_process_toc_entry(se_services_s_handle, reinterpret_cast<const uint8_t*>("DEVICE"), &err);
+    printf("SE process DEVICE: rc %lu err %lu\n", static_cast<unsigned long>(rc), static_cast<unsigned long>(err));
+  }
+#endif
 
 #ifdef APP_HAS_CAMERA
-  const int32_t camera_status = camera_init();
+  // Debugging aid: with TRAFFIC_CAMERA_AUTOSTART 0 the camera stays off until
+  // the debugger sets traffic_camera_enable before this point.
+  const int32_t camera_status = traffic_camera_enable ? camera_init() : -2;
 #if CAMERA_RAW8
   const char* camera_kind = "ARX3A0 RAW8 Bayer, demosaiced on the CPU";
 #else
@@ -412,7 +508,16 @@ extern "C" int app_main(void) {
     memset(fb, 0, kFrameBytes);
     SCB_CleanDCache_by_Addr(fb, static_cast<int32_t>(kFrameBytes));
   }
-  bool display_on = display_init() == 0 && display_start(g_framebuffer[1]) == 0;
+  bool display_on = display_init() == 0;
+#ifdef TRAFFIC_LCD_MADCTL
+  // The panel's memory access control (MADCTL, 0x36) turns or mirrors the
+  // picture in the panel itself, before the video stream starts (the board
+  // layer sets the value: bit 7 flips rows, bit 6 columns, on top of the 0x01
+  // the pack's panel driver writes). Turning the frame buffer on the CPU
+  // instead cost 60 ms a frame and starved the NPU.
+  if (display_on) DSI_DCS_Short_Write(0x36, TRAFFIC_LCD_MADCTL);
+#endif
+  if (display_on) display_on = display_start(g_framebuffer[1]) == 0;
   if (!display_on) printf("display: not available\n");
   int back = 0;
   if (display_on) {
@@ -491,8 +596,14 @@ extern "C" int app_main(void) {
       continue;
     }
 
-    // 4. The tracker and the line.
+    // 4. The tracker and the line. The joystick thread asks for a line
+    //    position; the tracker takes it here, between two updates.
     t0 = cycles();
+#ifdef APP_HAS_JOYSTICK
+    if (g_line_req_pos != tracker_line_pos() || g_line_req_vertical != tracker_line_vertical()) {
+      tracker_set_line(g_line_req_pos, g_line_req_vertical);
+    }
+#endif
     tracker_update(&det);
     const uint32_t t_track = cycles() - t0;
 

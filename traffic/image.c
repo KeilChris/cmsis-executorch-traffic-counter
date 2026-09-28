@@ -142,12 +142,31 @@ void image_rgb565_to_input(const uint16_t *camera, int w, int h, uint8_t *rgb, i
     }
 }
 
+/* The AppKit-E7's panel hangs upside down and its controller ignores the
+   MADCTL turn bits in video mode: with IMAGE_PANEL_TURN_180 everything drawn
+   into the panel buffer goes to the opposite x and y, here and in image_fill,
+   which every other drawing routine (boxes, line, score maps, text) uses. */
+#ifndef IMAGE_PANEL_TURN_180
+#define IMAGE_PANEL_TURN_180 0
+#endif
+
 void image_input_to_view(const uint8_t *rgb, int size, uint8_t *panel)
 {
     /* 1:1, centred in the view: a row copy each, no scaling. The margins stay as they are. */
     const int x0 = (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
     for (int y = 0; y < size; y++) {
+#if IMAGE_PANEL_TURN_180
+        /* Row y of the picture lands on panel row H-1-(y0+y), pixels reversed. */
+        const uint8_t *s = rgb + y * size * 3;
+        uint8_t *d = panel + ((IMAGE_PANEL_H - 1 - (y0 + y)) * IMAGE_PANEL_W + (IMAGE_PANEL_W - 1 - x0)) * 3;
+        for (int x = 0; x < size; x++, s += 3, d -= 3) {
+            d[0] = s[0];
+            d[1] = s[1];
+            d[2] = s[2];
+        }
+#else
         memcpy(panel + ((y0 + y) * IMAGE_PANEL_W + x0) * 3, rgb + y * size * 3, (size_t)size * 3U);
+#endif
     }
 }
 
@@ -239,6 +258,15 @@ void image_fill(uint8_t *panel, int x0, int y0, int x1, int y1, uint32_t rgb)
     y0 = y0 < 0 ? 0 : y0;
     x1 = x1 > IMAGE_PANEL_W ? IMAGE_PANEL_W : x1;
     y1 = y1 > IMAGE_PANEL_H ? IMAGE_PANEL_H : y1;
+#if IMAGE_PANEL_TURN_180
+    {   /* the same rectangle at the opposite x and y */
+        const int tx0 = IMAGE_PANEL_W - x1, ty0 = IMAGE_PANEL_H - y1;
+        x1 = IMAGE_PANEL_W - x0;
+        y1 = IMAGE_PANEL_H - y0;
+        x0 = tx0;
+        y0 = ty0;
+    }
+#endif
     for (int y = y0; y < y1; y++) {
         uint8_t *p = panel + (y * IMAGE_PANEL_W + x0) * 3;
         for (int x = x0; x < x1; x++, p += 3) {

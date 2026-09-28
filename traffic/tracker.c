@@ -57,6 +57,17 @@ void tracker_init(int size, int pos, int vertical)
     next_id = 1;
 }
 
+void tracker_set_line(int pos, int vertical)
+{
+    line_pos      = pos < 0 ? 0 : (pos >= input_size ? input_size - 1 : pos);
+    line_vertical = vertical;
+    for (int i = 0; i < TRACKER_MAX_TRACKS; i++) {
+        if (tracks[i].id != 0U) {
+            tracks[i].side = side_of(&tracks[i]);
+        }
+    }
+}
+
 void tracker_update(const detections_t *det)
 {
     uint8_t taken[DETECTOR_MAX_DETECTIONS] = {0};
