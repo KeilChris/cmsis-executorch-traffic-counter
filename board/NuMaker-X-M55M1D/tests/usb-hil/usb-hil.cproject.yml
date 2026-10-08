@@ -1,0 +1,32 @@
+# Copyright 2026 Arm Limited and/or its affiliates. SPDX-License-Identifier: Apache-2.0
+project:
+  description: Isolated packaged USB Device driver HIL, internal memory only
+  processor:
+    trustzone: off
+  define:
+    - NVT_VECTOR_ON_FLASH
+  packs:
+    - pack: Nuvoton::NuMicroM55_DFP
+      path: ../../../../pack-work/Nuvoton.NuMicroM55_DFP/abort-hardening/release/3.1.6-rc.1
+    - pack: ARM::CMSIS@6.2.0
+  components:
+    - component: CMSIS:CORE
+    - component: Device:Startup
+    - component: Device:Common:M55M1_M5531
+    - component: Device:StdDriver:CLK
+    - component: Device:StdDriver:SYS
+    - component: Device:StdDriver:GPIO
+    - component: Device:StdDriver:UART
+    - component: Device:StdDriver:Retarget
+    - component: Device:StdDriver:LPPDMA
+    - component: Device:StdDriver:PDMA
+    - component: Device:StdDriver:HSUSBD
+    - component: CMSIS Driver:USB Device:M55M1_M5531_HS@1.2.0
+  groups:
+    - group: USB qualification
+      files:
+        - file: ./main.c
+        - file: ./usb_hil.c
+        - file: ./usb_hil.h
+  output:
+    type: [elf, hex, map]

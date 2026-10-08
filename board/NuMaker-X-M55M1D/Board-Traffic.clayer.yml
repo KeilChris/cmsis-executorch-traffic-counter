@@ -1,0 +1,127 @@
+# Copyright 2026 Arm Limited and/or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Traffic-counter board layer for the Nuvoton NuMaker-X-M55M1D. The DFP
+# supplies the startup, peripheral drivers and UART retargeting. The BSP
+# supplies HyperRAM, the HM1055 camera and the complete LT7381 display stack.
+layer:
+  type: Board
+  description: NuMaker-X-M55M1D traffic counter with HyperRAM, LT7381 LCD and HM1055 camera
+  for-board: Nuvoton::NuMaker-X-M55M1D:V1.0
+  for-device: Nuvoton::M55M1H2LJAE
+
+  processor:
+    trustzone: off
+
+  connections:
+    - connect: NuMaker-X-M55M1D Board
+      provides:
+        - STDIN
+        - STDOUT
+        - STDERR
+        - Heap: 16384
+
+  define:
+    - CMSIS_target_header: \"NuMaker-X-M55M1D.h\"
+    # The DFP's DTCM vector section is not guaranteed to meet the Cortex-M55
+    # VTOR alignment. Keep the table at the naturally aligned flash base.
+    - NVT_VECTOR_ON_FLASH
+    - ETHOSU55
+    - APP_HAS_DISPLAY: 1
+    - APP_HAS_CAMERA: 1
+    # SDS recording and playback over the dedicated high-speed USB device
+    # connector J13. MDK USB device instance 0 uses Driver_USBD1 (HSUSBD0).
+    - APP_HAS_SDS: 1
+    - APP_SDS_USB_MDK_LOCAL: 1
+    - APP_SDS_POOL_SECTION: \".bss.hyperram\"
+    - CMSIS_DRIVER_USBD: 1
+    - CMSIS_DRIVER_USBD_HS: 1
+    - APP_CAMERA_NUVOTON: 1
+    # Retained streak-free baseline: capture only when inference and LCD
+    # transfers are idle. Use 0 only for controlled concurrency experiments.
+    - TRAFFIC_CAMERA_SERIAL: 1
+    - APP_DISPLAY_WIDTH: 800
+    - APP_DISPLAY_HEIGHT: 480
+    - APP_DISPLAY_BPP: 2
+    - APP_POOL_SECTION: \".bss.hyperram\"
+    - APP_FRAMEBUFFER_SECTION: \".bss.hyperram\"
+    - APP_TEMP_POOL_SECTION: \".bss.npu_sram\"
+    - APP_THREAD_STACK_SIZE: 0x8000
+    # The traffic model and Vela configuration are for an Ethos-U55-256.
+    - NPU_QCONFIG: 0
+    - NPU_REGIONCFG_0: 0
+    - NPU_REGIONCFG_1: 0
+    - NPU_REGIONCFG_2: 0
+    - AXI_LIMIT0_MEM_TYPE: 3
+    - AXI_LIMIT1_MEM_TYPE: 3
+    - AXI_LIMIT2_MEM_TYPE: 3
+    - AXI_LIMIT3_MEM_TYPE: 3
+
+  packs:
+    # Local camera-hardening candidate; keep installed 3.1.4 for rollback.
+    - pack: Nuvoton::NuMicro_M55M1_BSP
+      path: ../../pack-work/Nuvoton.NuMicro_M55M1_BSP/camera-hardening/release/3.1.5-rc.1
+    # Combined application validation of the frozen USB abort-hardening candidate.
+    # Installed DFP 3.1.5 remains available for rollback.
+    - pack: Nuvoton::NuMicroM55_DFP
+      path: ../../pack-work/Nuvoton.NuMicroM55_DFP/abort-hardening/release/3.1.6-rc.1
+    - pack: ARM::CMSIS@^6.2.0
+    - pack: ARM::CMSIS-Compiler@^2.1.0
+    - pack: ARM::ethos-u-core-driver@1.26.5
+    - pack: ARM::CMSIS-RTX@^5.9.1
+    - pack: ARM::SDS@^3.1.0
+    - pack: Keil::MDK-Middleware@^8.3.0
+
+  misc:
+    - for-compiler: AC6
+      Link:
+        - '--diag_suppress 6312,6314,6329,6848'
+
+  components:
+    - component: Device:Startup
+    - component: Device:Common:M55M1_M5531
+    - component: CMSIS:CORE
+    - component: CMSIS:RTOS2:Keil RTX5&Source
+    - component: CMSIS:OS Tick:SysTick
+    - component: SDS:Stream&CMSIS-RTOS2
+    # Local USB transport defers OUT result queries to the receiving thread.
+    - component: SDS:IO:Custom
+    - component: USB&MDK:CORE
+    - component: USB&MDK:Device
+    - component: USB&MDK:Device:Custom Class
+    - component: CMSIS-Compiler:CORE
+    - component: Device:StdDriver:CLK
+    - component: Device:StdDriver:SYS
+    - component: Device:StdDriver:UART
+    - component: Device:StdDriver:Retarget
+    - component: Device:StdDriver:GPIO
+    - component: Device:StdDriver:HSUSBD
+    - component: Device:StdDriver:LPPDMA
+    - component: Device:StdDriver:SPIM_HYPER
+    - component: Device:StdDriver:CCAP
+    - component: Device:StdDriver:EBI
+    - component: Device:StdDriver:PDMA
+    - component: Board Support:Memory:HyperRAM&NuMaker-X-M55M1D
+    - component: Board Support:Display:NuMaker-TFT-LCD5&LT7381
+    - component: Board Support:Camera:CMOS-720P&HM1055
+    - component: Machine Learning:NPU Support:Ethos-U Driver&Generic U55
+    - component: CMSIS Driver:USB Device:M55M1_M5531_HS
+
+  groups:
+    - group: Board
+      add-path:
+        - .
+        - ./RTE/SDS
+        - $Pack(ARM::SDS)$/sds/sdsio/client
+      files:
+        - file: ./main.c
+        - file: ./main.h
+        - file: ./NuMaker-X-M55M1D.h
+        - file: ./ethos_setup.c
+        - file: ./ethosu_cb_dcache.c
+        - file: ./sdsio_client_usb_mdk.c
+        - file: ./board_display.c
+        - file: ./board_display.h
+  linker:
+    - script: ./linker_ac6_hyperram.sct.src
+      for-compiler: AC6

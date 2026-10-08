@@ -31,6 +31,12 @@ solution:
     - pack: ARM::SSE_320_BSP@1.0.0
     # DFP + BSP of the Alif Ensemble E8 DevKit target.
     - pack: AlifSemiconductor::Ensemble@^2.2.0-0
+    # NuMaker-X-M55M1D support. Local candidates are selected by path.
+    # Local camera-hardening candidate; version 3.1.5-rc.1 comes from its PDSC.
+    - pack: Nuvoton::NuMicro_M55M1_BSP
+      path: ./pack-work/Nuvoton.NuMicro_M55M1_BSP/camera-hardening/release/3.1.5-rc.1
+    # DFP selection belongs to each project/layer: Board-Traffic and usb-hil
+    # select the local 3.1.6-rc.1 candidate for combined application validation.
 
   target-types:
     # Corstone-320 with an Ethos-U85 NPU, simulated on the Arm FVP.
@@ -134,7 +140,7 @@ solution:
       target-set:
         - set:
           images:
-            - project-context: cmsis-executorch.Debug
+            - project-context: traffic.Debug
           debugger:
             name: J-Link Server
             protocol: swd
@@ -181,6 +187,45 @@ solution:
             protocol: swd
             clock: 4000000
             start-pname: M55_HP
+
+    # Nuvoton NuMaker-X-M55M1D: Cortex-M55 with Ethos-U55, the on-board
+    # Nu-Link2-Me CMSIS-DAP probe, 8 MB HyperRAM, NuMaker-TFT-LCD5 V1.2 and
+    # CMOS-720P V1.0 camera. The first port uses debugger loading because the
+    # 2.4 MB model cannot fit in the MCU's 2 MB internal flash.
+    - type: NuMaker-X-M55M1D
+      board: Nuvoton::NuMaker-X-M55M1D:V1.0
+      device: Nuvoton::M55M1H2LJAE
+      variables:
+        - Board-Layer: $SolutionDir()$/board/NuMaker-X-M55M1D/Board-Traffic.clayer.yml
+        - Traffic-Board-Layer: $SolutionDir()$/board/NuMaker-X-M55M1D/Board-Traffic.clayer.yml
+        - AI-Layer: $SolutionDir()$/ai_layer_traffic/ai_layer.clayer.yml
+      target-set:
+        - set:
+          images:
+            - project-context: traffic.Release
+          debugger:
+            name: CMSIS-DAP@pyOCD
+            protocol: swd
+            # The board-specific HyperRAM loader runs from DTCM and configures
+            # a 96 MHz system clock before calibrating the HyperBus interface.
+            clock: 1000000
+        # Isolated camera API/ownership qualification, without the AI model.
+        # This is a different image; do not launch it with traffic.axf symbols.
+        - set: camera-test
+          images:
+            - project-context: camera-hil.Release
+          debugger:
+            name: CMSIS-DAP@pyOCD
+            protocol: swd
+            clock: 1000000
+        # USB-only driver qualification; internal flash/RAM, no HyperRAM loader.
+        - set: usb-test
+          images:
+            - project-context: usb-hil.Release
+          debugger:
+            name: CMSIS-DAP@pyOCD
+            protocol: swd
+            clock: 1000000
 
     # The same board, the other Cortex-M55: the high-efficiency core (160 MHz,
     # 256 kB TCMs) with the Ethos-U55 (128 MACs) that is local to it. Quake only;
@@ -239,6 +284,13 @@ solution:
     - project: ./traffic/traffic.cproject.yml
       for-context:
         - +AppKit-E7
+        - +NuMaker-X-M55M1D
+    - project: ./board/NuMaker-X-M55M1D/tests/camera-hil/camera-hil.cproject.yml
+      for-context:
+        - +NuMaker-X-M55M1D
+    - project: ./board/NuMaker-X-M55M1D/tests/usb-hil/usb-hil.cproject.yml
+      for-context:
+        - +NuMaker-X-M55M1D
 
   # MLOps information: exported to cmsis-executorch.cbuild-mlops.yml by
   # `cbuild setup ... --active SSE-320-U85`. Retarget the NPU here and

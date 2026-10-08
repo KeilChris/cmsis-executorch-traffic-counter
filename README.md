@@ -1,4 +1,4 @@
-# Traffic counter on the Alif AppKit-E7: YOLO26n on the Ethos-U55
+# Traffic counter on Cortex-M55 boards: YOLO26n on the Ethos-U55
 
 An Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2) counts the vehicles its camera
 sees. Ultralytics YOLO26n, exported with ExecuTorch and compiled by Vela, runs
@@ -10,16 +10,25 @@ picture, the boxes, the line and the tallies, and the joystick moves the line.
 Over the board's User USB, SDS records the model inputs and detections, or
 plays a recorded clip back into the detector instead of the camera.
 
+The same application also supports the **Nuvoton NuMaker-X-M55M1D** with the
+NuMaker-TFT-LCD5 V1.2 and CMOS-720P V1.0 modules. That target uses the HM1055
+parallel camera, LT7381 display controller, on-chip Ethos-U55-256 and external
+HyperRAM. It is debugger-loaded and provides SDS recording and playback over
+the board's J13 high-speed USB connector; it does not yet provide the
+AppKit-E7's joystick or persistent boot flow.
+
 | | |
 |---|---|
 | NPU | 81 ms per 416x416 frame (1.13 GMAC, 2.46 MB program in MRAM) |
 | Loop with the camera | 11.5 fps; the camera conversion runs while the NPU works |
 | SDS over USB | a 40-frame clip (20.7 MB) plays in about 8 s |
+| NuMaker-X-M55M1D | Streak-free serialized camera capture; USB recording 86/86 paired frames in a 30 s session; playback 4.23 frames/s |
 
 The repository is a fork of the Arm example
 [cmsis-executorch](https://github.com/Arm-Examples/cmsis-executorch): one CMSIS
 solution with several projects and targets. The traffic counter is
-`traffic/traffic.cproject.yml`, target-type **AppKit-E7**. The other projects
+`traffic/traffic.cproject.yml`, target-types **AppKit-E7** and
+**NuMaker-X-M55M1D**. The other projects
 (the Corstone-320 example, the NPU render and Quake on the DevKit-E8, the cat
 detector on the AppKit-E8) are still there; the
 [documentation](#read-on) covers them. The full technical description of the
@@ -92,6 +101,63 @@ cbuild cmsis-executorch.csolution.yml --active AppKit-E7 --packs
 
 The image is `out/traffic/AppKit-E7/Release/traffic.axf`.
 
+### NuMaker-X-M55M1D build and debugger-load flow
+
+Fit the **NuMaker-TFT-LCD5 V1.2** display and **CMOS-720P V1.0** camera, then
+connect the board's Nuvoton CMSIS-DAP USB port. For SDS, also connect **J13
+(USB HS)** directly to the host; J12 is the full-speed target connector and is
+not used by this configuration. This target currently selects:
+
+- `Nuvoton::NuMicro_M55M1_BSP` through the local **3.1.5-rc.1** candidate path
+- `Nuvoton::NuMicroM55_DFP@3.1.5`
+
+The [camera-hardening candidate](pack-work/Nuvoton.NuMicro_M55M1_BSP/camera-hardening/README.md)
+passes pack validation, the target build, live camera capture and the bounded
+SDS record/repeat-playback/record regression (85/85 frames). Replacement-cable
+tests on 2026-10-05 additionally passed 86/86 recording/repeat playback and
+338/338 recording/playback for a 120-second recording. Some camera HIL fault
+checks passed, and a fresh-start USB recording recheck passed 15/15. Remaining
+fault/recovery qualification is recorded in the [validation record](board/NuMaker-X-M55M1D/Validation.md).
+BSP **3.1.4** is preserved for rollback. The candidate
+README contains reproducible packaging, archive hashes and rollback steps.
+
+The separate [USB driver HIL project](board/NuMaker-X-M55M1D/tests/usb-hil/README.md)
+is implemented, host-tested and target-built; its hardware qualification is next.
+It does not replace the normal traffic target or change the packaged drivers.
+
+The pack workspaces contain local improvements used by this project: separate
+full/high-speed USB Device components with self-contained power control, the
+complete LT7381 board display implementation, a reusable NuMaker board layer,
+and interrupt/callback camera capture support.
+These are locally improved pack workspaces, not a claim that pristine downloads
+of those versions contain every change. See the
+[validated baseline and reproducibility limits](board/NuMaker-X-M55M1D/Validation.md).
+
+In **Manage Solution**, select **NuMaker-X-M55M1D**, apply and build. The image
+is `out/traffic/NuMaker-X-M55M1D/Release/traffic.axf`.
+
+For the first run or after a rebuild, select the launch configuration
+**CMSIS_DAP@pyOCD (launch)**. Its `NuMaker HyperRAM Load` task prepares a
+runner with the board-specific `M55M1_HyperRAM.FLM`, loads internal flash and
+the model/buffers in HyperRAM, then stops at `main()`. Do not use the generic
+CMSIS Load task for this target: the DFP's SPIM algorithm does not initialize
+the board's HyperRAM. The on-board CMSIS-DAP is kept at 1 MHz for reliability,
+so the roughly 3.1 MB transfer takes about 80 seconds.
+
+After that load, use **CMSIS_DAP@pyOCD (debug loaded image)** for quick reset
+and debug cycles without programming again. HyperRAM is volatile, so repeat
+the full launch after a power cycle. This debugger-only flow is intentional;
+persistent standalone boot is future work.
+
+Historical hardware baseline, before pack migration (2026-10-02): live HM1055 capture, ExecuTorch inference
+and LT7381 presentation, with the horizontal streaks eliminated by serialized
+capture (`TRAFFIC_CAMERA_SERIAL: 1`). J13 USB recording produced 15/15 paired
+frames, followed by two successful playbacks without reset. A subsequent
+30-second recording produced 86/86 paired frames; playback processed all 86
+in 20.4 seconds (4.23 frames/s). These are end-to-end SDS session measurements,
+not camera or NPU benchmarks. See the [validation record](board/NuMaker-X-M55M1D/Validation.md)
+for the retained settings, test procedure and remaining limitations.
+
 ## 4. Prepare the board once
 
 The Secure Enclave boots the HP core from a table of contents in MRAM, which
@@ -129,8 +195,9 @@ tallies after a few seconds.
 
 ## 6. Record and play back (SDS)
 
-With the application running and the User USB connected, these VS Code tasks
-(Terminal > Run Task) drive SDSIO-Server through `traffic/sds_session.py`:
+With the application running and its target USB connected (AppKit-E7 **User
+USB J1**, or NuMaker-X-M55M1D **USB HS J13**), these VS Code tasks (Terminal >
+Run Task) drive SDSIO-Server through `traffic/sds_session.py`:
 
 | Task | Does |
 |------|------|
@@ -167,6 +234,20 @@ before starting the next.
   configuration. Repeat step 4. Keep the camera frames and the panel buffers
   in SRAM0: neither the camera DMA nor the display controller reaches SRAM1,
   and SRAM8 hangs the bus.
+- **NuMaker loading fails in a generic SPIM flash algorithm:** launch
+  `CMSIS_DAP@pyOCD (launch)` so the `NuMaker HyperRAM Load` task substitutes
+  the board-specific HyperRAM loader. Allow the slow CMSIS-DAP transfer to
+  finish; a 60-second UI wait expiring does not mean programming failed.
+- **SDSIO-Server cannot find the NuMaker:** connect the host cable to **J13
+  (USB HS)**. J12 uses the other CMSIS-Driver instance and the on-board
+  CMSIS-DAP connector is only the debugger/programmer. Continue past `main`
+  and any breakpoints, and close other SDSIO servers. If it still waits while
+  the application is running, investigate enumeration; a wait does not itself
+  prove that the CPU is halted. Automatic reconnect recovery is not validated.
+- **SDSIO reports a fatal protocol error:** treat that session as invalid even
+  if both streams subsequently close. Stop the server and perform a full
+  debugger reload before retrying; power cycling alone loses the NuMaker's
+  HyperRAM image. Keep failed recordings separate from new validation runs.
 
 ## Licences
 
@@ -179,6 +260,10 @@ committed.
 
 ## Read on
 
+- [NuMaker validation baseline](board/NuMaker-X-M55M1D/Validation.md): camera
+  quality, USB regression results, retained configuration and open tests.
+- [NuMaker DFP/BSP improvement plan](board/NuMaker-X-M55M1D/Pack-improvements.md):
+  CMSIS-Driver ownership, concrete upstream changes and acceptance criteria.
 - [documentation/traffic-counter.md](documentation/traffic-counter.md): the
   traffic counter in detail (model, pipeline, memory map, camera bring-up on
   the E7, SDS over USB, NPU performance and its PMU counters).

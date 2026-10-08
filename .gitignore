@@ -74,6 +74,9 @@ RTE/_*/
 # FVP output captured by CI and by the manual run in the README
 fvp_stdout.log
 
+# Complete host-side USB HIL transcripts; kept locally across firmware rebuilds.
+logs/usb-hil/
+
 # Editor config. The CMSIS Solution extension regenerates tasks.json,
 # settings.json and cmsis.json; only the FVP run/debug wiring is kept: the
 # model shim + its Dockerfile, and launch.json, whose Arm-FVP launch config is
@@ -116,3 +119,6 @@ traffic/test_image.h
 model/.cache/
 # Frames ffmpeg extracts for the "SDS: video to CameraIn stream" task.
 .sds_frames/
+
+pack-work/
+recordings/**

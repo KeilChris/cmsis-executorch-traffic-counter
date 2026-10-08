@@ -13,6 +13,105 @@
 #include "RTE_Components.h"
 #include CMSIS_device_header
 
+#if defined(APP_CAMERA_NUVOTON)
+
+#include "ImageSensor.h"
+#include "cmsis_os2.h"
+#include "camera.h"
+
+#define CAMERA_FRAME_BYTES (CAMERA_WIDTH * CAMERA_HEIGHT * CAMERA_BPP)
+
+static uint8_t camera_buffer[CAMERA_BUFFERS][CAMERA_FRAME_BYTES]
+    __attribute__((aligned(32), section(".bss.ai_pool")));
+static uint32_t camera_frames;
+static uint32_t camera_errors;
+static uint32_t camera_next;
+static osEventFlagsId_t camera_flags;
+#if defined(IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION) && IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION >= 2
+static bool camera_fault;
+#endif
+
+static void camera_event(uint32_t events)
+{
+    osEventFlagsSet(camera_flags, events);
+}
+
+int32_t camera_init(void)
+{
+#if defined(IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION) && IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION >= 2
+    if (camera_fault) return 4; /* A quarantined DMA buffer requires reset. */
+#endif
+    if (camera_flags != NULL) return 0;
+    camera_flags = osEventFlagsNew(NULL);
+    if (camera_flags == NULL) {
+        return 1;
+    }
+    ImageSensor_SetEventCallback(camera_event);
+    if (ImageSensor_Init() != 0) {
+        ImageSensor_SetEventCallback(NULL);
+        osEventFlagsDelete(camera_flags);
+        camera_flags = NULL;
+        return 2;
+    }
+    if (ImageSensor_Config(eIMAGE_FMT_RGB565, CAMERA_WIDTH, CAMERA_HEIGHT, true) != 0) {
+        ImageSensor_SetEventCallback(NULL);
+        osEventFlagsDelete(camera_flags);
+        camera_flags = NULL;
+        return 3;
+    }
+    return 0;
+}
+
+const void *camera_frame(uint32_t timeout_ms)
+{
+    uint8_t *frame = camera_buffer[camera_next];
+    if (camera_flags == NULL) return NULL;
+#if defined(IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION) && IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION >= 2
+    if (camera_fault) {
+        osDelay(1U); /* A quarantined camera must not busy-spin/starve USB. */
+        return NULL;
+    }
+    /* Exclusive, cache-line-aligned buffer: remove dirty CPU lines BEFORE DMA,
+     * invalidate again only once a complete frame has been released by CCAP. */
+    SCB_CleanInvalidateDCache_by_Addr(frame, CAMERA_FRAME_BYTES);
+#endif
+    osEventFlagsClear(camera_flags,
+                      IMAGE_SENSOR_EVENT_FRAME_COMPLETE | IMAGE_SENSOR_EVENT_ERROR);
+    int capture_result = ImageSensor_TriggerCapture((uint32_t)(uintptr_t)frame);
+    if (capture_result != 0) {
+#if defined(IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION) && IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION >= 2
+        if (capture_result == IMAGE_SENSOR_FAULT) camera_fault = true;
+#endif
+        ++camera_errors;
+        return NULL;
+    }
+    uint32_t events = osEventFlagsWait(camera_flags,
+                                       IMAGE_SENSOR_EVENT_FRAME_COMPLETE |
+                                           IMAGE_SENSOR_EVENT_ERROR,
+                                       osFlagsWaitAny, timeout_ms);
+    if ((events & osFlagsError) != 0U ||
+        (events & IMAGE_SENSOR_EVENT_ERROR) != 0U ||
+        ImageSensor_WaitCaptureDone() != 0) {
+#if defined(IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION) && IMAGE_SENSOR_CAPTURE_CONTRACT_VERSION >= 2
+        if (ImageSensor_AbortCapture(IMAGE_SENSOR_CAPTURE_POLL_LIMIT) != IMAGE_SENSOR_OK)
+            camera_fault = true; /* Never submit/reuse the still-owned buffer. */
+#endif
+        ++camera_errors;
+        return NULL;
+    }
+    SCB_InvalidateDCache_by_Addr(frame, CAMERA_FRAME_BYTES);
+    camera_next = (camera_next + 1U) % CAMERA_BUFFERS;
+    ++camera_frames;
+    return frame;
+}
+
+uint32_t camera_frame_count(void) { return camera_frames; }
+uint32_t camera_error_count(void) { return camera_errors; }
+void camera_auto_exposure(uint32_t mean) { (void)mean; }
+uint32_t camera_gain(void) { return 0x10000U; }
+
+#else
+
 #include "Driver_CPI.h"
 #include "camera.h"
 #include "cmsis_os2.h"
@@ -146,3 +245,5 @@ uint32_t camera_gain(void)
 {
     return gain_q16;
 }
+
+#endif /* APP_CAMERA_NUVOTON */

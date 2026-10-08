@@ -29,7 +29,12 @@
 extern "C" {
 #endif
 
-#if defined(RTE_Drivers_CAMERA_SENSOR_ARX3A0)
+#if defined(APP_CAMERA_NUVOTON)
+#define CAMERA_WIDTH   416
+#define CAMERA_HEIGHT  416
+#define CAMERA_RAW8    0  /* CCAP converts HM1055 YUV422 to RGB565 */
+#define CAMERA_BPP     2
+#elif defined(RTE_Drivers_CAMERA_SENSOR_ARX3A0)
 #define CAMERA_WIDTH   RTE_ARX3A0_CAMERA_SENSOR_FRAME_WIDTH
 #define CAMERA_HEIGHT  RTE_ARX3A0_CAMERA_SENSOR_FRAME_HEIGHT
 #define CAMERA_RAW8    1  /* one byte per pixel, Bayer mosaic */
@@ -60,10 +65,8 @@ extern "C" {
    reads the other. */
 #define CAMERA_BUFFERS 2
 
-/* Power the sensor, configure CSI-2 and the CPI, start capturing.
-   0 on success, else the step that failed (1 initialize, 2 power: no sensor
-   answering on I2C, 3 CPI configuration, 4 sensor configuration, 5 events,
-   6 auto exposure, 7 capture start). */
+/* Power and configure the sensor and capture interface. The exact nonzero
+   initialization step is board-specific. */
 int32_t camera_init(void);
 
 /* The newest completed frame (CAMERA_WIDTH x CAMERA_HEIGHT x CAMERA_BPP

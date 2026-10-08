@@ -153,8 +153,21 @@ void image_rgb565_to_input(const uint16_t *camera, int w, int h, uint8_t *rgb, i
 void image_input_to_view(const uint8_t *rgb, int size, uint8_t *panel)
 {
     /* 1:1, centred in the view: a row copy each, no scaling. The margins stay as they are. */
-    const int x0 = (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
+    const int x0 = IMAGE_VIEW_LEFT + (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
     for (int y = 0; y < size; y++) {
+#if APP_DISPLAY_BPP == 2
+        for (int x = 0; x < size; x++) {
+            const uint8_t *s = rgb + (y * size + x) * 3;
+            const uint16_t p = (uint16_t)(((uint16_t)(s[0] & 0xF8U) << 8) |
+                                          ((uint16_t)(s[1] & 0xFCU) << 3) | (s[2] >> 3));
+#if IMAGE_PANEL_TURN_180
+            ((uint16_t *)panel)[(IMAGE_PANEL_H - 1 - (y0 + y)) * IMAGE_PANEL_W +
+                                (IMAGE_PANEL_W - 1 - (x0 + x))] = p;
+#else
+            ((uint16_t *)panel)[(y0 + y) * IMAGE_PANEL_W + x0 + x] = p;
+#endif
+        }
+#else
 #if IMAGE_PANEL_TURN_180
         /* Row y of the picture lands on panel row H-1-(y0+y), pixels reversed. */
         const uint8_t *s = rgb + y * size * 3;
@@ -166,6 +179,7 @@ void image_input_to_view(const uint8_t *rgb, int size, uint8_t *panel)
         }
 #else
         memcpy(panel + ((y0 + y) * IMAGE_PANEL_W + x0) * 3, rgb + y * size * 3, (size_t)size * 3U);
+#endif
 #endif
     }
 }
@@ -197,7 +211,7 @@ static void box(uint8_t *panel, int x1, int y1, int x2, int y2, int t, uint32_t 
 
 void image_draw_tracks(uint8_t *panel, const track_t *tracks, int size)
 {
-    const int x0 = (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
+    const int x0 = IMAGE_VIEW_LEFT + (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
     char label[24];
     for (int i = 0; i < TRACKER_MAX_TRACKS; i++) {
         const track_t *t = &tracks[i];
@@ -223,7 +237,7 @@ void image_draw_tracks(uint8_t *panel, const track_t *tracks, int size)
 
 void image_draw_detections(uint8_t *panel, const detections_t *det, int size)
 {
-    const int x0 = (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
+    const int x0 = IMAGE_VIEW_LEFT + (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
     for (uint32_t i = 0; i < det->count; i++) {
         const detection_t *d = &det->det[i];
         int x1 = x0 + (int)d->x1, x2 = x0 + (int)d->x2, y1 = y0 + (int)d->y1, y2 = y0 + (int)d->y2;
@@ -239,7 +253,7 @@ void image_draw_detections(uint8_t *panel, const detections_t *det, int size)
 
 void image_draw_line(uint8_t *panel, int size, int pos, int vertical, uint32_t rgb)
 {
-    const int x0 = (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
+    const int x0 = IMAGE_VIEW_LEFT + (IMAGE_VIEW - size) / 2, y0 = IMAGE_VIEW_TOP + (IMAGE_VIEW - size) / 2;
     /* dashed: 12 on, 6 off */
     for (int i = 0; i < size; i += 18) {
         const int end = i + 12 < size ? i + 12 : size;
@@ -268,12 +282,21 @@ void image_fill(uint8_t *panel, int x0, int y0, int x1, int y1, uint32_t rgb)
     }
 #endif
     for (int y = y0; y < y1; y++) {
+#if APP_DISPLAY_BPP == 2
+        uint16_t *p = (uint16_t *)panel + y * IMAGE_PANEL_W + x0;
+        const uint16_t colour = (uint16_t)(((uint16_t)(r & 0xF8U) << 8) |
+                                           ((uint16_t)(g & 0xFCU) << 3) | (b >> 3));
+        for (int x = x0; x < x1; x++) {
+            *p++ = colour;
+        }
+#else
         uint8_t *p = panel + (y * IMAGE_PANEL_W + x0) * 3;
         for (int x = x0; x < x1; x++, p += 3) {
             p[0] = r;
             p[1] = g;
             p[2] = b;
         }
+#endif
     }
 }
 

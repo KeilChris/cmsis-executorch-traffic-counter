@@ -2,6 +2,87 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "NuMaker USB HIL Prepare",
+            "detail": "Checks USB-only image identity and internal-flash HEX addresses; never accesses hardware.",
+            "type": "process",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/board/NuMaker-X-M55M1D/tests/usb-hil/prepare_launch.py",
+                "${command:cmsis-csolution.getCbuildRunFile}",
+                "${workspaceFolder}/out/cmsis-executorch+NuMaker-X-M55M1D.usb-hil.cbuild-run.yml"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "NuMaker USB HIL Load",
+            "detail": "Loads only the isolated USB test into internal flash, after launch validation.",
+            "dependsOn": "NuMaker USB HIL Prepare",
+            "dependsOrder": "sequence",
+            "type": "shell",
+            "command": "pyocd",
+            "args": [
+                "load", "--probe", "cmsisdap:", "--cbuild-run",
+                "${workspaceFolder}/out/cmsis-executorch+NuMaker-X-M55M1D.usb-hil.cbuild-run.yml"
+            ],
+            "options": {"cwd": "${workspaceFolder}"},
+            "osx": {
+                "options": {
+                    "shell": {"executable": "/bin/bash", "args": ["-c"]}
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "NuMaker HyperRAM Load",
+            "detail": "Loads the NuMaker image with the board-specific HyperRAM algorithm instead of the DFP's generic SPIM algorithm.",
+            "type": "shell",
+            "command": "${workspaceFolder}/board/NuMaker-X-M55M1D/Flash/cmsis-task.sh",
+            "args": [
+                "load",
+                "${command:cmsis-csolution.getCbuildRunFile}",
+                "--probe",
+                "cmsisdap:"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "NuMaker camera HIL Prepare",
+            "detail": "Rejects a non-HIL runner or missing images before preparing a dedicated HyperRAM runner; does not access hardware.",
+            "type": "process",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/board/NuMaker-X-M55M1D/tests/camera-hil/prepare_launch.py",
+                "${command:cmsis-csolution.getCbuildRunFile}",
+                "${workspaceFolder}/out/cmsis-executorch+NuMaker-X-M55M1D.camera-hil.hyperram.cbuild-run.yml"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "NuMaker camera HIL Load",
+            "detail": "Loads only the isolated camera test image after its runner and symbols have been checked.",
+            "dependsOn": "NuMaker camera HIL Prepare",
+            "dependsOrder": "sequence",
+            "type": "shell",
+            "command": "pyocd",
+            "args": [
+                "load",
+                "--probe",
+                "cmsisdap:",
+                "--cbuild-run",
+                "${workspaceFolder}/out/cmsis-executorch+NuMaker-X-M55M1D.camera-hil.hyperram.cbuild-run.yml"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Setup Python virtual environment",
             "type": "shell",
             "command": "./setup_venv.sh",

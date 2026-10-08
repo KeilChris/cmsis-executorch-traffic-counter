@@ -1,0 +1,61 @@
+/* Copyright 2026 Arm Limited and/or its affiliates.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Internal flash contains startup and executable code. The debugger loads the
+ * model into on-board HyperRAM; all other large buffers there are UNINIT. The
+ * first 4 KiB stay unused because the BSP HyperRAM calibration writes at
+ * direct-map offset zero on every reset.
+ */
+
+#define FLASH_BASE       0x00100000
+#define FLASH_SIZE       0x00200000
+#define DTCM_BASE        0x20000000
+#define DTCM_SIZE        0x00020000
+#define SRAM_BASE        0x20100000
+#define SRAM_SIZE        0x00150000
+#define HYPERRAM_BASE    0x82001000
+#define HYPERRAM_SIZE    0x007FF000
+#define STACK_SIZE       0x00002000
+#define HEAP_SIZE        0x00004000
+
+LR_FLASH FLASH_BASE FLASH_SIZE {
+  ER_FLASH FLASH_BASE FLASH_SIZE {
+    *startup_M55M1.o (RESET, +First)
+    *(InRoot$$Sections)
+    *startup*.o (+RO)
+    *system*.o (+RO)
+    *hyperram_code.o (+RO)
+    *main.o (+RO)
+    .ANY (+RO)
+    .ANY (+XO)
+  }
+
+  RW_DTCM DTCM_BASE (DTCM_SIZE - STACK_SIZE - HEAP_SIZE) {
+    .ANY (+RW +ZI)
+  }
+
+  ARM_LIB_HEAP (DTCM_BASE + DTCM_SIZE - STACK_SIZE - HEAP_SIZE) EMPTY HEAP_SIZE { }
+  ARM_LIB_STACK (DTCM_BASE + DTCM_SIZE) EMPTY -STACK_SIZE { }
+
+  RW_NPU_SRAM SRAM_BASE UNINIT SRAM_SIZE {
+    * (.bss.npu_sram)
+  }
+}
+
+LR_HYPERRAM HYPERRAM_BASE HYPERRAM_SIZE {
+  ER_MODEL HYPERRAM_BASE {
+    *model_pte.o (+RO)
+  }
+
+  RW_HYPERRAM AlignExpr(+0, 32) UNINIT {
+    * (.bss.hyperram)
+    * (.bss.sram1)
+    * (.bss.ai_pool)
+    * (.bss.vram.data)
+  }
+}
+
+ScatterAssert(ImageLength(ER_FLASH) < FLASH_SIZE)
+ScatterAssert(ImageLength(RW_DTCM) < (DTCM_SIZE - STACK_SIZE - HEAP_SIZE))
+ScatterAssert(ImageLength(RW_NPU_SRAM) <= SRAM_SIZE)
+ScatterAssert((ImageLength(ER_MODEL) + ImageLength(RW_HYPERRAM)) <= HYPERRAM_SIZE)

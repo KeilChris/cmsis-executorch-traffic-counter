@@ -21,10 +21,14 @@
 extern "C" {
 #endif
 
-#define IMAGE_PANEL_W   APP_DISPLAY_WIDTH
-#define IMAGE_PANEL_H   APP_DISPLAY_HEIGHT
-#define IMAGE_VIEW      APP_DISPLAY_WIDTH                     /* the square picture on the panel */
-#define IMAGE_VIEW_TOP  ((APP_DISPLAY_HEIGHT - APP_DISPLAY_WIDTH) / 2)
+#define IMAGE_PANEL_W    APP_DISPLAY_WIDTH
+#define IMAGE_PANEL_H    APP_DISPLAY_HEIGHT
+#define IMAGE_VIEW       ((APP_DISPLAY_WIDTH < APP_DISPLAY_HEIGHT) ? APP_DISPLAY_WIDTH : APP_DISPLAY_HEIGHT)
+#define IMAGE_VIEW_LEFT  ((APP_DISPLAY_WIDTH - IMAGE_VIEW) / 2)
+#define IMAGE_VIEW_TOP   ((APP_DISPLAY_HEIGHT - IMAGE_VIEW) / 2)
+#ifndef APP_DISPLAY_BPP
+#define APP_DISPLAY_BPP 3
+#endif
 
 /* Bayer orders: the colours of a 2x2 cell, top-left first, then its right neighbour. */
 #define IMAGE_BAYER_RGGB 0

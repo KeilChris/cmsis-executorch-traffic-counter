@@ -22,17 +22,24 @@
 #define APP_POOL_SECTION ".bss.ai_pool"
 #endif
 
+#ifdef APP_SDS_POOL_SECTION
+#define SDS_POOL_ATTR __attribute__((section(APP_SDS_POOL_SECTION)))
+#else
+#define SDS_POOL_ATTR
+#endif
+
 /* The CameraIn stream buffer holds one record and its header plus the
-   transfer chunks around it; the Detections records are small. The input
-   buffer lives in the DTCM (the CPU alone reads and writes it, over RTT):
-   SRAM1 is full with the MT9M114's two 640x480 RGB565 frames and the two
-   model input slots. */
+   transfer chunks around it; the Detections records are small. Boards may
+   move both buffers with APP_SDS_POOL_SECTION when their DTCM cannot hold a
+   complete 416x416 RGB888 record. */
 #define REC_PLAY_IN_BUF_MAX  (416U * 416U * 3U + 16384U)
 #define REC_PLAY_OUT_BUF     8192U
 #define REC_PLAY_WAIT_MS     30000U /* playback: longest wait for the next record (the RTT down link moves about 100 kB/s: 5 s per frame) */
 
-static uint8_t sds_in_buf[REC_PLAY_IN_BUF_MAX] __attribute__((aligned(32)));
-static uint8_t sds_out_buf[REC_PLAY_OUT_BUF] __attribute__((aligned(32)));
+static uint8_t sds_in_buf[REC_PLAY_IN_BUF_MAX]
+    __attribute__((aligned(32))) SDS_POOL_ATTR;
+static uint8_t sds_out_buf[REC_PLAY_OUT_BUF]
+    __attribute__((aligned(32))) SDS_POOL_ATTR;
 static uint32_t in_buf_size;
 
 static sdsId_t in_id, out_id;
@@ -45,6 +52,14 @@ static const osThreadAttr_t control_attr = {
     .stack_size = sizeof(control_stack),
     .priority   = osPriorityNormal1,
 };
+
+/* The SDS 3.1.0 MDK USB client leaves the USB stack and its event flags
+   allocated when its initial wait for USB configuration times out.  Clean up
+   that partial initialization before retrying.  This lower-layer entry point
+   is provided by SDS:IO:USB&MDK USB or the board-local USB transport. */
+#if defined(RTE_SDS_IO_CLIENT_USB_MDK) || defined(APP_SDS_USB_MDK_LOCAL)
+extern int32_t sdsioClientUninit(void);
+#endif
 
 static void sds_event(sdsId_t id, uint32_t event)
 {
@@ -59,7 +74,20 @@ static void sds_event(sdsId_t id, uint32_t event)
 static __NO_RETURN void control_thread(void *argument)
 {
     (void)argument;
-    uint32_t next = osKernelGetTickCount();
+    uint32_t next;
+
+    /* USB configuration can happen well after application startup (for
+       example when SDSIO-Server is launched later).  Do not permanently
+       disable record/playback after the SDS client's one-shot timeout. */
+    while (sdsInit(sds_event) != SDS_OK) {
+        printf("SDS: init pending, waiting for host USB connection\n");
+#if defined(RTE_SDS_IO_CLIENT_USB_MDK) || defined(APP_SDS_USB_MDK_LOCAL)
+        (void)sdsioClientUninit();
+#endif
+        osDelay(1000U);
+    }
+    printf("SDS: initialized\n");
+    next = osKernelGetTickCount();
 
     for (;;) {
         sdsExchange();
@@ -115,11 +143,9 @@ void rec_play_init(uint32_t input_size)
     if (in_buf_size > sizeof(sds_in_buf)) {
         in_buf_size = sizeof(sds_in_buf);
     }
-    if (sdsInit(sds_event) != SDS_OK) {
-        printf("SDS: init failed, no recording or playback\n");
-        return;
+    if (osThreadNew(control_thread, NULL, &control_attr) == NULL) {
+        printf("SDS: failed to create control thread\n");
     }
-    osThreadNew(control_thread, NULL, &control_attr);
 }
 
 static void close_streams(void)
@@ -196,33 +222,41 @@ int32_t rec_play_read_input(void *buf, uint32_t size, uint32_t *timeslot)
     return -1;
 }
 
-static int32_t write_record(sdsId_t id, const void *buf, uint32_t size, uint32_t timeslot)
+static int32_t write_record(sdsId_t id, const void *buf, uint32_t size,
+                            uint32_t timeslot, uint32_t required_flags)
 {
+    const uint32_t started = osKernelGetTickCount();
     int32_t ret;
-    do {
-        ret = sdsWrite(id, timeslot, buf, size);
-        if (ret == SDS_NO_SPACE) {
-            if ((sdsFlags & (SDS_FLAG_ALIVE | SDS_FLAG_START)) != (SDS_FLAG_ALIVE | SDS_FLAG_START)) {
-                return -1;  /* stopped, or the link is gone: do not wait for space forever */
-            }
-            osDelay(1U);
+    for (;;) {
+        if ((sdsFlags & required_flags) != required_flags) {
+            break;
         }
-    } while (ret == SDS_NO_SPACE);
-    if (ret != (int32_t)size) {
-        sdsState = SDS_STATE_STOP_REQ;
-        return -1;
+        ret = sdsWrite(id, timeslot, buf, size);
+        if (ret == (int32_t)size) {
+            return 0;
+        }
+        if ((ret != SDS_NO_SPACE) ||
+            ((uint32_t)(osKernelGetTickCount() - started) >= REC_PLAY_WAIT_MS)) {
+            break;
+        }
+        osDelay(1U);
     }
-    return 0;
+    sdsState = SDS_STATE_STOP_REQ;
+    return -1;
 }
 
 int32_t rec_play_write_input(const void *buf, uint32_t size, uint32_t timeslot)
 {
-    return write_record(in_id, buf, size, timeslot);
+    /* Stop admitting new pairs when the host clears START. */
+    return write_record(in_id, buf, size, timeslot, SDS_FLAG_ALIVE | SDS_FLAG_START);
 }
 
 int32_t rec_play_write_output(const void *buf, uint32_t size, uint32_t timeslot)
 {
-    return write_record(out_id, buf, size, timeslot);
+    /* The caller has already accepted this frame's input. Finish its pair
+       even after START clears; rec_play_poll closes streams between frames.
+       A lost link or a persistently full buffer still aborts the write. */
+    return write_record(out_id, buf, size, timeslot, SDS_FLAG_ALIVE);
 }
 
 uint32_t rec_play_state(void)

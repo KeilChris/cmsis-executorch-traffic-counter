@@ -1,0 +1,22 @@
+SDSIO-Server v3.1.0
+Press 'Ctrl+C' or 'X' to exit.
+Working directory: /Users/chrsei01/02_Git/KeilChris/cmsis-executorch-traffic-counter/recordings/traffic/combined-packs-20261008-NvNNA6
+SDSIO command input: R=Record, P=playback, S/s=stop, T/t=reset, X/x=exit, A-H=set flags 0-7, a-h=clear flags 0-7.
+SDSIO-Client USB device connected.
+sdsFlags = 0x10000000.
+SDSIO command: start recording ('R').
+sdsFlags = 0x90000000.
+Record:   CameraIn (CameraIn.0.sds)
+Record:   Detections (Detections.0.sds)
+SDSIO command: stop ('S').
+sdsFlags = 0x10000000.
+Closed:   CameraIn (CameraIn.0.sds)
+Closed:   Detections (Detections.0.sds)
+SDSIO command: terminate ('X').
+SDSIO-Server shut down.
+
+Recording verified: 86/86 paired frames
+
+files:
+  CameraIn.0.sds
+  Detections.0.sds

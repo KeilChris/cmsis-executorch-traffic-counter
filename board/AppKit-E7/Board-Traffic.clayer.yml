@@ -43,6 +43,7 @@ layer:
   define:
     - CMSIS_target_header: \"DevKit-E8.h\"
     - ETHOSU55
+    - APP_ALIF_SERVICES: 1
     # The Ethos-U driver's NPU configuration of the pack's E7 layer: the
     # command stream (QCONFIG) and region 0 (the weights, in the MRAM) over the
     # NPU's AXI1 port, region 1 (Vela's scratch in the SRAM) over AXI0.

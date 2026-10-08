@@ -1,0 +1,22 @@
+; Copyright 2026 Arm Limited and/or its affiliates.
+; SPDX-License-Identifier: Apache-2.0
+
+PRG 0 PI
+{
+  PrgCode +0
+  {
+    * (+RO)
+  }
+  PrgData +0
+  {
+    * (+RW,+ZI)
+  }
+}
+
+DSCR +0
+{
+  DevDscr +0
+  {
+    FlashDev.o
+  }
+}

@@ -1,0 +1,20 @@
+# Copyright 2026 Arm Limited and/or its affiliates. SPDX-License-Identifier: Apache-2.0
+project:
+  description: Isolated NuMaker camera ownership and failure-path qualification
+  define:
+    - CAMERA_HIL_TEST: 1
+  groups:
+    - group: Camera qualification
+      add-path:
+        - ../../../../traffic
+      files:
+        - file: ./runner.c
+        - file: ./runner.h
+        # Keep the existing USB SDS control/flags exchange available. This test
+        # image deliberately does not open CameraIn/Detections streams.
+        - file: ../../../../traffic/rec_play.c
+  layers:
+    - layer: ../../Board-Traffic.clayer.yml
+      type: Board
+  output:
+    type: [elf, hex, map]

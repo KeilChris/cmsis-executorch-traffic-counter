@@ -1,0 +1,48 @@
+/**************************************************************************//**
+ * @file     RTE_Device_USBD.h
+ * @version  V1.10
+ * @brief    RTE Device Configuration for Nuvoton M55M1 USB device
+ *
+ * @copyright SPDX-License-Identifier: Apache-2.0
+ * @copyright Copyright (C) 2024 Nuvoton Technology Corp. All rights reserved.
+ ******************************************************************************/
+
+//-------- <<< Use Configuration Wizard in Context Menu >>> --------------------
+
+#ifndef __RTE_DEVICE_USBD_H
+#define __RTE_DEVICE_USBD_H
+
+//   <o0.0> USBD0 (Full Speed Universal Serial Bus Device)
+//   <i> Normally selected by component ::CMSIS Driver:USB Device:M55M1_M5531_FS
+#ifndef RTE_USBD0
+#define RTE_USBD0                       0
+#endif
+
+//   <o0.0> USBD1 (High Speed Universal Serial Bus Device)
+//   <i> Normally selected by component ::CMSIS Driver:USB Device:M55M1_M5531_HS
+#ifndef RTE_USBD1
+#define RTE_USBD1                       0
+#endif
+
+// <h>Full-speed controller power and clock
+//   <q>Manage the USBD0 clock in PowerControl
+#define RTE_USBD0_MANAGE_POWER          1
+//   <o>USBD0 clock source
+//     <0x00000000=>HIRC48M
+#define RTE_USBD0_CLOCK_SOURCE          CLK_USBSEL_USBSEL_HIRC48M
+//   <o>USBD0 clock divider
+//     <0x00000000=>Divide by 1
+#define RTE_USBD0_CLOCK_DIVIDER         CLK_USBDIV_USBDIV(1)
+// </h>
+
+// <h>High-speed controller power and clock
+//   <q>Manage the HSOTG PHY and HSUSBD0 clock in PowerControl
+#define RTE_USBD1_MANAGE_POWER          1
+//   <q>Enable HXT and wait for it before starting the PHY
+#define RTE_USBD1_ENABLE_HXT            1
+//   <o>HSOTG PHY reference clock
+//     <0x00000000=>19.2 MHz <0x00000100=>20 MHz <0x00000200=>24 MHz
+//     <0x00000300=>16 MHz <0x00000600=>26 MHz <0x00000700=>32 MHz
+#define RTE_USBD1_PHY_REF_CLOCK         HSOTG_PHYCTL_FSEL_24_0M
+// </h>
+#endif

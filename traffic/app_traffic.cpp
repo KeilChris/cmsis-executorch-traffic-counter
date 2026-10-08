@@ -34,8 +34,10 @@
 #include CMSIS_device_header
 
 #include "cmsis_os2.h"
+#ifdef APP_ALIF_SERVICES
 #include "se_services_port.h"
 #include "services_lib_api.h"
+#endif
 
 #include "detector.h"
 #include "image.h"
@@ -65,6 +67,12 @@ extern "C" {
 #endif
 #ifndef TRAFFIC_LINE_VERTICAL
 #define TRAFFIC_LINE_VERTICAL 0
+#endif
+#ifndef TRAFFIC_CAMERA_SERIAL
+#define TRAFFIC_CAMERA_SERIAL 0
+#endif
+#if TRAFFIC_CAMERA_SERIAL && (!defined(APP_CAMERA_NUVOTON) || !defined(APP_HAS_CAMERA))
+#error "TRAFFIC_CAMERA_SERIAL is a NuMaker single-shot camera experiment"
 #endif
 
 // ---------------------------------------------------------------------------
@@ -129,7 +137,7 @@ alignas(32) uint8_t g_slot[kSlots][kInputBytes] __attribute__((section(".bss.sra
 // because the NPU's scratch went to SRAM1 (detector.cpp, the layer's
 // APP_TEMP_POOL_SECTION); the CDC200 cannot read SRAM1, and SRAM8 hangs the
 // bus (see the documentation).
-constexpr uint32_t kFrameBytes = IMAGE_PANEL_W * IMAGE_PANEL_H * 3;
+constexpr uint32_t kFrameBytes = IMAGE_PANEL_W * IMAGE_PANEL_H * APP_DISPLAY_BPP;
 alignas(32) uint8_t g_framebuffer0[kFrameBytes] __attribute__((section(APP_FRAMEBUFFER_SECTION)));
 alignas(32) uint8_t g_framebuffer1[kFrameBytes] __attribute__((section(APP_FRAMEBUFFER_SECTION)));
 uint8_t* const g_framebuffer[2] = {g_framebuffer0, g_framebuffer1};
@@ -138,7 +146,8 @@ uint8_t* const g_framebuffer[2] = {g_framebuffer0, g_framebuffer1};
 // SRAM1 (2.5 MB at 0x08000000) holds the camera frames, the input slots and
 // the SDS input buffer. Power and clock it through the Secure Enclave before
 // any use; a store to an unpowered SRAM hangs the bus.
-bool sram1_power_on() {
+bool bulk_memory_power_on() {
+#ifdef APP_ALIF_SERVICES
   uint32_t error = 0;
   if (SERVICES_power_memory_req(se_services_s_handle, POWER_MEM_SRAM_0_ENABLE | POWER_MEM_SRAM_1_ENABLE, &error) !=
           SERVICES_REQ_SUCCESS ||
@@ -150,6 +159,7 @@ bool sram1_power_on() {
     printf("SRAM1: clock request failed (error %lu)\n", static_cast<unsigned long>(error));
     return false;
   }
+#endif
   return true;
 }
 
@@ -159,6 +169,25 @@ inline uint32_t us(uint32_t c) { return static_cast<uint32_t>(static_cast<uint64
 enum Source { kTestImage = 0, kCamera = 1, kPlayback = 2 };
 
 #ifdef APP_HAS_CAMERA
+volatile uint32_t g_convert_cycles, g_camera_mean;
+
+#if TRAFFIC_CAMERA_SERIAL
+// Diagnostic A/B path: no background capture, including during SDS playback.
+// app_main waits for the previous LCD job before calling this function; the
+// synchronous detector_run from the previous iteration has already returned.
+const uint8_t* camera_input(uint32_t timeout_ms) {
+  const void* frame = camera_frame(timeout_ms);
+  if (frame == nullptr) return nullptr;
+  const uint32_t t0 = cycles();
+  image_rgb565_to_input(static_cast<const uint16_t*>(frame), CAMERA_WIDTH, CAMERA_HEIGHT, g_slot[0], kSize,
+                        CAMERA_QUARTER_TURNS);
+  g_convert_cycles = cycles() - t0;
+  return g_slot[0];
+}
+
+void camera_input_done() {}  // slot 0 belongs exclusively to app_main
+void camera_pause(bool) {}  // playback never calls camera_input in this mode
+#else
 // The camera thread: every camera frame turned into a model input in the slot
 // the vision thread is not reading. The vision thread takes the newest slot
 // and holds it for the frame; the camera thread writes the other one, again
@@ -169,7 +198,6 @@ volatile bool g_camera_pause;      // playback: the slots belong to the vision t
 volatile bool g_camera_busy;       // the camera thread is writing a slot
 osEventFlagsId_t g_slot_event;
 uint64_t g_camera_stack[512] __attribute__((section(APP_POOL_SECTION)));
-volatile uint32_t g_convert_cycles, g_camera_mean;
 
 __NO_RETURN void camera_thread(void*) {
   for (;;) {
@@ -226,6 +254,7 @@ void camera_pause(bool pause) {
     g_slot_newest = -1;
   }
 }
+#endif  // TRAFFIC_CAMERA_SERIAL
 #endif
 
 #ifdef APP_HAS_DISPLAY
@@ -391,7 +420,7 @@ extern "C" int app_main(void) {
          static_cast<unsigned long>(SystemCoreClock / 1000000U), TRAFFIC_LINE_POS,
          TRAFFIC_LINE_VERTICAL ? "vertical" : "horizontal");
 
-  if (!sram1_power_on()) return 1;
+  if (!bulk_memory_power_on()) return 1;
   uint8_t* const g_input = g_slot[0];
 
 #ifdef TRAFFIC_BENCHMARK
@@ -490,11 +519,18 @@ extern "C" int app_main(void) {
 #endif
   traffic_status.camera_status = camera_status;
   const bool camera_on = camera_status == 0;
-#ifdef APP_HAS_CAMERA
+#if defined(APP_HAS_CAMERA) && !TRAFFIC_CAMERA_SERIAL
   if (camera_on) {
     g_slot_event = osEventFlagsNew(nullptr);
+#if defined(APP_CAMERA_NUVOTON)
+    // The Nuvoton BSP captures synchronously and busy-polls CCAP_Stop(). Keep
+    // it below the vision task so a completed frame can be consumed at once.
+    constexpr osPriority_t camera_priority = osPriorityBelowNormal;
+#else
+    constexpr osPriority_t camera_priority = osPriorityAboveNormal;
+#endif
     static const osThreadAttr_t attr = {.name = "camera", .stack_mem = g_camera_stack, .stack_size = sizeof(g_camera_stack),
-                                        .priority = osPriorityAboveNormal};
+                                        .priority = camera_priority};
     osThreadNew(camera_thread, nullptr, &attr);
   }
 #endif
@@ -542,7 +578,7 @@ extern "C" int app_main(void) {
 #ifdef APP_HAS_SDS
     mode = rec_play_poll();
 #endif
-#ifdef APP_HAS_CAMERA
+#if defined(APP_HAS_CAMERA) && defined(APP_HAS_SDS)
     if (camera_on && (mode == REC_PLAY_PLAYBACK) != (last_mode == REC_PLAY_PLAYBACK)) camera_pause(mode == REC_PLAY_PLAYBACK);
 #endif
     last_mode = mode;
@@ -564,7 +600,16 @@ extern "C" int app_main(void) {
 #endif
 #ifdef APP_HAS_CAMERA
     if (source == kCamera) {
-      input = camera_input(200);  // the camera thread converted it already
+#if TRAFFIC_CAMERA_SERIAL && defined(APP_HAS_DISPLAY)
+      if (display_on) {
+        // Only app_main submits display jobs. Once the previous job is done,
+        // returning its permit cannot start another transfer during capture.
+        // Do not keep the permit: a capture timeout must not deadlock display.
+        osSemaphoreAcquire(g_display_idle, osWaitForever);
+        osSemaphoreRelease(g_display_idle);
+      }
+#endif
+      input = camera_input(200);  // serial capture, or the newest converted slot
       if (input == nullptr) {
         printf("camera: no frame for 200 ms (%lu frames, %lu errors)\n", static_cast<unsigned long>(camera_frame_count()),
                static_cast<unsigned long>(camera_error_count()));
@@ -577,9 +622,13 @@ extern "C" int app_main(void) {
     // 2. Recording: the input.
     uint32_t t_sds = 0;
 #ifdef APP_HAS_SDS
+    // Playback already supplied an input. Recording must first accept its
+    // CameraIn record; a stop while its buffer is full must not leave an
+    // orphan Detections record. Keep processing/displaying the live frame.
+    bool record_output = mode == REC_PLAY_PLAYBACK;
     if (mode == REC_PLAY_RECORD) {
       t0 = cycles();
-      rec_play_write_input(input, kInputBytes, timeslot);
+      record_output = rec_play_write_input(input, kInputBytes, timeslot) == 0;
       t_sds += cycles() - t0;
     }
 #endif
@@ -609,7 +658,7 @@ extern "C" int app_main(void) {
 
     // 5. The result, while recording or playing back.
 #ifdef APP_HAS_SDS
-    if (mode != REC_PLAY_IDLE) {
+    if (record_output) {
       t0 = cycles();
       rec_play_write_output(&det, sizeof(det), timeslot);
       t_sds += cycles() - t0;

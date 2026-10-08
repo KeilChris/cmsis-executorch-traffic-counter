@@ -43,9 +43,15 @@ rec_play_mode_t rec_play_poll(void);
    stream ended (the streams close at the next poll), -1 on an error. */
 int32_t rec_play_read_input(void *buf, uint32_t size, uint32_t *timeslot);
 
-/* Recording: append one record; waits while the stream buffer is full.
-   0 when written, -1 on an error (the streams close at the next poll). */
+/* Recording: append an input only while the host requests recording.
+   0 when accepted, -1 on stop, link loss, error or a full-buffer timeout.
+   Do not append a detection if this input was not accepted. */
 int32_t rec_play_write_input(const void *buf, uint32_t size, uint32_t timeslot);
+
+/* Append the result of an accepted input (recorded or played back). Finish
+   this pair even if the host requests Stop during inference. Waits for space
+   with a bounded timeout while the link is alive. Returns 0 when accepted,
+   -1 on link loss, error or timeout; streams close at the next poll. */
 int32_t rec_play_write_output(const void *buf, uint32_t size, uint32_t timeslot);
 
 /* SDS state for the display: sdsState, sdsFlags. */

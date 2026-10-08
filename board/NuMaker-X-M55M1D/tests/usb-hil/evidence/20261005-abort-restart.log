@@ -1,0 +1,1305 @@
+Negotiated bulk MPS 512: high speed
+PASS OUT 0
+PASS IN 0
+PASS loopback 0
+PASS OUT 1
+PASS IN 1
+PASS loopback 1
+PASS OUT 63
+PASS IN 63
+PASS loopback 63
+PASS OUT 64
+PASS IN 64
+PASS loopback 64
+PASS OUT 65
+PASS IN 65
+PASS loopback 65
+PASS OUT 127
+PASS IN 127
+PASS loopback 127
+PASS OUT 128
+PASS IN 128
+PASS loopback 128
+PASS OUT 129
+PASS IN 129
+PASS loopback 129
+PASS OUT 511
+PASS IN 511
+PASS loopback 511
+PASS OUT 512
+PASS IN 512
+PASS loopback 512
+PASS OUT 513
+PASS IN 513
+PASS loopback 513
+PASS OUT 1023
+PASS IN 1023
+PASS loopback 1023
+PASS OUT 1024
+PASS IN 1024
+PASS loopback 1024
+PASS OUT 1025
+PASS IN 1025
+PASS loopback 1025
+PASS OUT 8191
+PASS IN 8191
+PASS loopback 8191
+PASS OUT 8192
+PASS IN 8192
+PASS loopback 8192
+PASS short/ZLP OUT 0 into 8192
+PASS short/ZLP OUT 511 into 8192
+PASS short/ZLP OUT 512 into 8192
+PASS short/ZLP OUT 513 into 8192
+PASS callback rearm 0x31
+PASS abort 0x31
+PASS OUT 513
+PASS callback rearm 0x32
+PASS abort 0x32
+PASS IN 513
+PASS abort partial 0x31
+{
+  "result": "FAIL",
+  "error": "target failure bits 0x8: {'magic': 1430800716, 'version': 1, 'configured': 1, 'mps': 512, 'resets': 1, 'case_id': 60, 'mode': 49, 'active': 0, 'requested': 513, 'out_count': 1, 'in_count': 0, 'out_callbacks': 1, 'in_callbacks': 0, 'aborts': 3, 'errors': 8, 'last_driver_error': 0}",
+  "completed_cases": [
+    {
+      "case": "OUT 0",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 1,
+        "mode": 49,
+        "active": 0,
+        "requested": 0,
+        "out_count": 0,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 0",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 2,
+        "mode": 50,
+        "active": 0,
+        "requested": 0,
+        "out_count": 0,
+        "in_count": 0,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 0",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 3,
+        "mode": 52,
+        "active": 0,
+        "requested": 0,
+        "out_count": 0,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 1",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 4,
+        "mode": 49,
+        "active": 0,
+        "requested": 1,
+        "out_count": 1,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 1",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 5,
+        "mode": 50,
+        "active": 0,
+        "requested": 1,
+        "out_count": 0,
+        "in_count": 1,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 1",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 6,
+        "mode": 52,
+        "active": 0,
+        "requested": 1,
+        "out_count": 1,
+        "in_count": 1,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 63",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 7,
+        "mode": 49,
+        "active": 0,
+        "requested": 63,
+        "out_count": 63,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 63",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 8,
+        "mode": 50,
+        "active": 0,
+        "requested": 63,
+        "out_count": 0,
+        "in_count": 63,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 63",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 9,
+        "mode": 52,
+        "active": 0,
+        "requested": 63,
+        "out_count": 63,
+        "in_count": 63,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 64",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 10,
+        "mode": 49,
+        "active": 0,
+        "requested": 64,
+        "out_count": 64,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 64",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 11,
+        "mode": 50,
+        "active": 0,
+        "requested": 64,
+        "out_count": 0,
+        "in_count": 64,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 64",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 12,
+        "mode": 52,
+        "active": 0,
+        "requested": 64,
+        "out_count": 64,
+        "in_count": 64,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 65",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 13,
+        "mode": 49,
+        "active": 0,
+        "requested": 65,
+        "out_count": 65,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 65",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 14,
+        "mode": 50,
+        "active": 0,
+        "requested": 65,
+        "out_count": 0,
+        "in_count": 65,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 65",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 15,
+        "mode": 52,
+        "active": 0,
+        "requested": 65,
+        "out_count": 65,
+        "in_count": 65,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 127",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 16,
+        "mode": 49,
+        "active": 0,
+        "requested": 127,
+        "out_count": 127,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 127",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 17,
+        "mode": 50,
+        "active": 0,
+        "requested": 127,
+        "out_count": 0,
+        "in_count": 127,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 127",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 18,
+        "mode": 52,
+        "active": 0,
+        "requested": 127,
+        "out_count": 127,
+        "in_count": 127,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 128",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 19,
+        "mode": 49,
+        "active": 0,
+        "requested": 128,
+        "out_count": 128,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 128",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 20,
+        "mode": 50,
+        "active": 0,
+        "requested": 128,
+        "out_count": 0,
+        "in_count": 128,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 128",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 21,
+        "mode": 52,
+        "active": 0,
+        "requested": 128,
+        "out_count": 128,
+        "in_count": 128,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 129",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 22,
+        "mode": 49,
+        "active": 0,
+        "requested": 129,
+        "out_count": 129,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 129",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 23,
+        "mode": 50,
+        "active": 0,
+        "requested": 129,
+        "out_count": 0,
+        "in_count": 129,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 129",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 24,
+        "mode": 52,
+        "active": 0,
+        "requested": 129,
+        "out_count": 129,
+        "in_count": 129,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 511",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 25,
+        "mode": 49,
+        "active": 0,
+        "requested": 511,
+        "out_count": 511,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 511",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 26,
+        "mode": 50,
+        "active": 0,
+        "requested": 511,
+        "out_count": 0,
+        "in_count": 511,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 511",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 27,
+        "mode": 52,
+        "active": 0,
+        "requested": 511,
+        "out_count": 511,
+        "in_count": 511,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 512",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 28,
+        "mode": 49,
+        "active": 0,
+        "requested": 512,
+        "out_count": 512,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 512",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 29,
+        "mode": 50,
+        "active": 0,
+        "requested": 512,
+        "out_count": 0,
+        "in_count": 512,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 512",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 30,
+        "mode": 52,
+        "active": 0,
+        "requested": 512,
+        "out_count": 512,
+        "in_count": 512,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 513",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 31,
+        "mode": 49,
+        "active": 0,
+        "requested": 513,
+        "out_count": 513,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 513",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 32,
+        "mode": 50,
+        "active": 0,
+        "requested": 513,
+        "out_count": 0,
+        "in_count": 513,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 513",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 33,
+        "mode": 52,
+        "active": 0,
+        "requested": 513,
+        "out_count": 513,
+        "in_count": 513,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 1023",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 34,
+        "mode": 49,
+        "active": 0,
+        "requested": 1023,
+        "out_count": 1023,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 1023",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 35,
+        "mode": 50,
+        "active": 0,
+        "requested": 1023,
+        "out_count": 0,
+        "in_count": 1023,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 1023",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 36,
+        "mode": 52,
+        "active": 0,
+        "requested": 1023,
+        "out_count": 1023,
+        "in_count": 1023,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 1024",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 37,
+        "mode": 49,
+        "active": 0,
+        "requested": 1024,
+        "out_count": 1024,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 1024",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 38,
+        "mode": 50,
+        "active": 0,
+        "requested": 1024,
+        "out_count": 0,
+        "in_count": 1024,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 1024",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 39,
+        "mode": 52,
+        "active": 0,
+        "requested": 1024,
+        "out_count": 1024,
+        "in_count": 1024,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 1025",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 40,
+        "mode": 49,
+        "active": 0,
+        "requested": 1025,
+        "out_count": 1025,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 1025",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 41,
+        "mode": 50,
+        "active": 0,
+        "requested": 1025,
+        "out_count": 0,
+        "in_count": 1025,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 1025",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 42,
+        "mode": 52,
+        "active": 0,
+        "requested": 1025,
+        "out_count": 1025,
+        "in_count": 1025,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 8191",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 43,
+        "mode": 49,
+        "active": 0,
+        "requested": 8191,
+        "out_count": 8191,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 8191",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 44,
+        "mode": 50,
+        "active": 0,
+        "requested": 8191,
+        "out_count": 0,
+        "in_count": 8191,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 8191",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 45,
+        "mode": 52,
+        "active": 0,
+        "requested": 8191,
+        "out_count": 8191,
+        "in_count": 8191,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 46,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 8192,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 47,
+        "mode": 50,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 0,
+        "in_count": 8192,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "loopback 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 48,
+        "mode": 52,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 8192,
+        "in_count": 8192,
+        "out_callbacks": 1,
+        "in_callbacks": 1,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "short/ZLP OUT 0 into 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 49,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 0,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "short/ZLP OUT 511 into 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 50,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 511,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "short/ZLP OUT 512 into 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 51,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 512,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "short/ZLP OUT 513 into 8192",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 52,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 513,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "callback rearm 0x31",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 53,
+        "mode": 49,
+        "active": 0,
+        "requested": 513,
+        "out_count": 513,
+        "in_count": 0,
+        "out_callbacks": 2,
+        "in_callbacks": 0,
+        "aborts": 0,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "abort 0x31",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 54,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 0,
+        "in_count": 0,
+        "out_callbacks": 0,
+        "in_callbacks": 0,
+        "aborts": 1,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "OUT 513",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 55,
+        "mode": 49,
+        "active": 0,
+        "requested": 513,
+        "out_count": 513,
+        "in_count": 0,
+        "out_callbacks": 1,
+        "in_callbacks": 0,
+        "aborts": 1,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "callback rearm 0x32",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 56,
+        "mode": 50,
+        "active": 0,
+        "requested": 513,
+        "out_count": 0,
+        "in_count": 513,
+        "out_callbacks": 0,
+        "in_callbacks": 2,
+        "aborts": 1,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "abort 0x32",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 57,
+        "mode": 50,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 0,
+        "in_count": 0,
+        "out_callbacks": 0,
+        "in_callbacks": 0,
+        "aborts": 2,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "IN 513",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 58,
+        "mode": 50,
+        "active": 0,
+        "requested": 513,
+        "out_count": 0,
+        "in_count": 513,
+        "out_callbacks": 0,
+        "in_callbacks": 1,
+        "aborts": 2,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    },
+    {
+      "case": "abort partial 0x31",
+      "status": {
+        "magic": 1430800716,
+        "version": 1,
+        "configured": 1,
+        "mps": 512,
+        "resets": 1,
+        "case_id": 59,
+        "mode": 49,
+        "active": 0,
+        "requested": 8192,
+        "out_count": 512,
+        "in_count": 0,
+        "out_callbacks": 0,
+        "in_callbacks": 0,
+        "aborts": 3,
+        "errors": 0,
+        "last_driver_error": 0
+      }
+    }
+  ]
+}USB HIL failed; retain this output and inspect before retry/reset.

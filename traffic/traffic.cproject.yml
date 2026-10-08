@@ -56,6 +56,9 @@ project:
         - file: ./image.h
         # SDS recording and playback of the model input and the detections.
         - file: ./rec_play.c
+          for-context:
+            - +AppKit-E7
+            - +NuMaker-X-M55M1D
         - file: ./rec_play.h
         - file: ./test_image.c
         - file: ./test_image.h
@@ -67,7 +70,7 @@ project:
   layers:
     - layer: $Traffic-Board-Layer$
       type: Board
-    - layer: ../ai_layer_traffic/ai_layer.clayer.yml
+    - layer: $AI-Layer$
       type: AI
 
   output:
